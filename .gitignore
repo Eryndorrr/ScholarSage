@@ -1,2 +1,21 @@
 .superpowers/
 .worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Environment
+.env
+
+# Testing
+.pytest_cache/
+
+# Data
+data/
