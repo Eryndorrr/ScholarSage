@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
 import uuid
 import enum
@@ -20,11 +20,11 @@ class Document(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     collection_id = Column(String, ForeignKey("collections.id"), nullable=False)
-    title = Column(String, nullable=False)
-    file_path = Column(String, nullable=False)
+    title = Column(String(200), nullable=False)
+    file_path = Column(String(500), nullable=False)
     file_type = Column(SQLEnum(FileType), nullable=False)
     file_size = Column(Integer, default=0)
-    upload_time = Column(DateTime, default=datetime.utcnow)
+    upload_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # 关系
     collection = relationship("Collection", back_populates="documents")
