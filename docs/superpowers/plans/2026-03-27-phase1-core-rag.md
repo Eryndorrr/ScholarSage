@@ -895,13 +895,11 @@ class WordParser(BaseParser):
 
 - [ ] **Step 7: 运行测试验证通过**
 
-- [ ] **Step 6: 运行测试验证通过**
-
 Run: `cd backend && python -m pytest tests/test_core/test_parsers.py -v`
 
-Expected: PASS - 3 tests passed
+Expected: PASS - 4 tests passed (including Word parser tests)
 
-- [ ] **Step 7: 提交解析器实现**
+- [ ] **Step 8: 提交解析器实现**
 
 ```bash
 git add backend/
@@ -910,6 +908,7 @@ git commit -m "feat: add document parsers
 - Add BaseParser abstract class
 - Add MarkdownParser with paragraph-based chunking
 - Add PDFParser using pypdf
+- Add WordParser for DOCX files
 - Add parser tests
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
@@ -1621,6 +1620,7 @@ Create: `backend/app/core/rag/document_processor.py`
 from typing import Dict, List
 from app.core.parsers.pdf_parser import PDFParser
 from app.core.parsers.markdown_parser import MarkdownParser
+from app.core.parsers.word_parser import WordParser
 from app.core.rag.embeddings import EmbeddingEngine
 from app.core.rag.vector_store import VectorStore
 from app.models.document import FileType
@@ -2770,7 +2770,7 @@ services:
     restart: unless-stopped
 ```
 
-- [ ] **Step 4: 创建数据库初始化脚本**
+- [ ] **Step 5: 创建数据库初始化脚本**
 
 Create: `backend/app/init_db.py`
 
@@ -2787,7 +2787,7 @@ if __name__ == "__main__":
     init_db()
 ```
 
-- [ ] **Step 5: 提交Docker配置**
+- [ ] **Step 6: 提交Docker配置**
 
 ```bash
 git add .
