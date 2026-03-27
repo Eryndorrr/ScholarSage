@@ -1,0 +1,32 @@
+# Web框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# 数据库
+sqlalchemy==2.0.25
+alembic==1.13.1
+
+# RAG核心
+llama-index==0.10.6
+llama-index-vector-stores-chroma==0.1.4
+chromadb==0.4.22
+
+# 文档处理
+pypdf==4.0.1
+python-docx==1.1.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# AI模型
+openai==1.10.0
+
+# 工具
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# 测试
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
