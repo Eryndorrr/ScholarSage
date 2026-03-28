@@ -1,6 +1,12 @@
-from typing import List
+from typing import List, Optional
 from openai import OpenAI
+from openai.error import OpenAIError
 from app.config import settings
+
+
+class GeneratorError(Exception):
+    """Generator custom exception"""
+    pass
 
 
 class Generator:
@@ -14,7 +20,8 @@ class Generator:
         self,
         question: str,
         contexts: List[str],
-        max_tokens: int = 1000
+        max_tokens: int = 1000,
+        temperature: float = 0.7
     ) -> str:
         """基于上下文生成答案"""
         # 构建提示词
@@ -29,15 +36,18 @@ class Generator:
 
 答案："""
 
-        # 调用LLM
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": "你是一个专业的问答助手，善于基于提供的参考资料给出准确、有引用的答案。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.7
-        )
+        try:
+            # 调用LLM
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "你是一个专业的问答助手，善于基于提供的参考资料给出准确、有引用的答案。"},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
 
-        return response.choices[0].message.content
+            return response.choices[0].message.content
+        except OpenAIError as e:
+            raise GeneratorError(f"Failed to generate answer: {e}")
