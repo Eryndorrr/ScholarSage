@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 import chromadb
-from chromadb.errors import ChromaException
+from chromadb.errors import ChromaError
 from app.config import settings
 
 
@@ -22,21 +22,21 @@ class VectorStore:
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
-        except ChromaException as e:
+        except ChromaError as e:
             raise VectorStoreError(f"Failed to create collection: {e}")
 
     def get_collection(self, collection_name: str):
         """获取集合"""
         try:
             return self.client.get_collection(name=collection_name)
-        except ChromaException as e:
+        except ChromaError as e:
             raise VectorStoreError(f"Failed to get collection: {e}")
 
     def delete_collection(self, collection_name: str):
         """删除集合"""
         try:
             self.client.delete_collection(name=collection_name)
-        except ChromaException as e:
+        except ChromaError as e:
             raise VectorStoreError(f"Failed to delete collection: {e}")
 
     def add_documents(
@@ -56,7 +56,7 @@ class VectorStore:
                 metadatas=metadatas,
                 ids=ids
             )
-        except ChromaException as e:
+        except ChromaError as e:
             raise VectorStoreError(f"Failed to add documents: {e}")
 
     def search(
@@ -73,5 +73,5 @@ class VectorStore:
                 n_results=top_k
             )
             return results
-        except ChromaException as e:
+        except ChromaError as e:
             raise VectorStoreError(f"Failed to search: {e}")

@@ -1,6 +1,5 @@
 from typing import List, Optional
-from openai import OpenAI
-from openai.error import OpenAIError
+from openai import OpenAI, APIError
 from app.config import settings
 
 
@@ -49,5 +48,5 @@ class Generator:
             )
 
             return response.choices[0].message.content
-        except OpenAIError as e:
+        except APIError as e:
             raise GeneratorError(f"Failed to generate answer: {e}")
