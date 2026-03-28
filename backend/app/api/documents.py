@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Document, FileType
+from app.models import Document, Collection, FileType
 from app.schemas import DocumentResponse
 import os
 import uuid
@@ -17,6 +17,10 @@ async def upload_document(
     db: Session = Depends(get_db)
 ):
     """上传文档"""
+    # 验证collection是否存在
+    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
     # 确定文件类型
     filename = file.filename
     if filename.endswith('.pdf'):
