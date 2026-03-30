@@ -1,7 +1,11 @@
 from typing import List, Dict, Optional
+import os
 import chromadb
 from chromadb.errors import ChromaError
 from app.config import settings
+
+# 禁用 ChromaDB 遥测
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
 
 
 class VectorStoreError(Exception):
@@ -13,11 +17,7 @@ class VectorStore:
     """Chroma向量存储"""
 
     def __init__(self, persist_dir: str = None):
-        # 禁用遥测以避免警告
-        self.client = chromadb.PersistentClient(
-            path=persist_dir or settings.chroma_persist_dir,
-            anonymized_telemetry=False
-        )
+        self.client = chromadb.PersistentClient(path=persist_dir or settings.chroma_persist_dir)
 
     def create_collection(self, collection_name: str):
         """创建集合"""
