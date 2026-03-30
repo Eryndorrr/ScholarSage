@@ -4,7 +4,7 @@ import { CollectionList } from './components/CollectionManager/CollectionList'
 import { ChatWindow } from './components/QAInterface/ChatWindow'
 import { DocumentUpload } from './components/DocumentManager/DocumentUpload'
 import { DocumentList } from './components/DocumentManager/DocumentList'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
 
 const queryClient = new QueryClient()
@@ -13,43 +13,74 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
+  const pollingRef = useRef<number | null>(null)
 
   // 加载文档列表
-  useEffect(() => {
-    if (!selectedCollection) {
-      setDocuments([])
-      return
-    }
-
-    const fetchDocuments = async () => {
-      setIsLoadingDocs(true)
-      try {
-        const response = await fetch(`/api/collections/${selectedCollection}/documents`)
-        if (response.ok) {
-          const data = await response.json()
-          setDocuments(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch documents:', error)
-      } finally {
-        setIsLoadingDocs(false)
-      }
-    }
-
-    fetchDocuments()
-  }, [selectedCollection])
-
-  const handleUploadComplete = async () => {
-    // 刷新文档列表
+  const fetchDocuments = async () => {
     if (!selectedCollection) return
     try {
       const response = await fetch(`/api/collections/${selectedCollection}/documents`)
       if (response.ok) {
         const data = await response.json()
         setDocuments(data)
+        return data
       }
     } catch (error) {
-      console.error('Failed to refresh documents:', error)
+      console.error('Failed to fetch documents:', error)
+    }
+    return null
+  }
+
+  // 初始加载和切换知识库时
+  useEffect(() => {
+    if (!selectedCollection) {
+      setDocuments([])
+      return
+    }
+
+    setIsLoadingDocs(true)
+    fetchDocuments().finally(() => setIsLoadingDocs(false))
+  }, [selectedCollection])
+
+  // 轮询：检查是否有处理中的文档
+  useEffect(() => {
+    if (!selectedCollection) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      return
+    }
+
+    // 检查是否有处理中的文档
+    const hasProcessingDocs = documents.some(
+      doc => doc.status === 'pending' || doc.status === 'processing'
+    )
+
+    if (hasProcessingDocs && !pollingRef.current) {
+      // 开始轮询
+      pollingRef.current = window.setInterval(() => {
+        fetchDocuments()
+      }, 2000) // 每2秒刷新一次
+    } else if (!hasProcessingDocs && pollingRef.current) {
+      // 停止轮询
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [selectedCollection, documents])
+
+  const handleUploadComplete = async () => {
+    // 刷新文档列表
+    const data = await fetchDocuments()
+    if (data) {
+      setDocuments(data)
     }
   }
 
