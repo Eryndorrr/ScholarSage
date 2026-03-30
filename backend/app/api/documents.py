@@ -1,26 +1,71 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Document, Collection, FileType
+from app.models import Document, Collection, FileType, ProcessStatus
 from app.schemas import DocumentResponse
+from app.core.rag.document_processor import DocumentProcessor
 import os
 import uuid
 
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
 
 
+def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType):
+    """后台任务：处理文档"""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        # 更新状态为处理中
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            return
+        document.status = ProcessStatus.PROCESSING
+        db.commit()
+
+        # 处理文档
+        processor = DocumentProcessor()
+        result = processor.process_document(
+            file_path=file_path,
+            collection_id=collection_id,
+            file_type=file_type
+        )
+
+        # 更新处理结果
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if result["success"]:
+            document.status = ProcessStatus.COMPLETED
+            document.chunk_count = result["chunk_count"]
+        else:
+            document.status = ProcessStatus.FAILED
+            document.error_message = result.get("error", "Unknown error")
+        db.commit()
+
+    except Exception as e:
+        # 更新失败状态
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            document.status = ProcessStatus.FAILED
+            document.error_message = str(e)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("", response_model=DocumentResponse)
 async def upload_document(
     collection_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """上传文档"""
+    """上传文档并自动处理"""
     # 验证collection是否存在
     collection = db.query(Collection).filter(Collection.id == collection_id).first()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
     # 确定文件类型
     filename = file.filename
     if filename.endswith('.pdf'):
@@ -47,11 +92,21 @@ async def upload_document(
         title=filename,
         file_path=file_path,
         file_type=file_type,
-        file_size=len(content)
+        file_size=len(content),
+        status=ProcessStatus.PENDING
     )
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # 后台处理文档（向量化）
+    background_tasks.add_task(
+        process_document_task,
+        document.id,
+        file_path,
+        collection_id,
+        file_type
+    )
 
     return document
 
@@ -63,3 +118,29 @@ def list_documents(collection_id: str, db: Session = Depends(get_db)):
         Document.collection_id == collection_id
     ).all()
     return documents
+
+
+@router.delete("/{document_id}")
+def delete_document(
+    collection_id: str,
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """删除文档"""
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.collection_id == collection_id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # 删除文件
+    if document.file_path and os.path.exists(document.file_path):
+        os.remove(document.file_path)
+
+    # 删除数据库记录
+    db.delete(document)
+    db.commit()
+
+    return {"success": True, "message": "Document deleted"}

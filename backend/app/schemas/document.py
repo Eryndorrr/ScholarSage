@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from app.models.document import FileType
+from app.models.document import FileType, ProcessStatus
 
 
 class DocumentBase(BaseModel):
@@ -21,6 +21,9 @@ class DocumentResponse(DocumentBase):
     collection_id: str
     file_type: FileType
     file_size: int
+    status: ProcessStatus
+    chunk_count: int
+    error_message: Optional[str] = None
     upload_time: datetime
 
     class Config:

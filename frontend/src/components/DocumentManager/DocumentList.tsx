@@ -1,4 +1,4 @@
-import { FileText, Trash2 } from 'lucide-react'
+import { FileText, Trash2, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react'
 import type { Document } from '../../types/document'
 
 interface DocumentListProps {
@@ -32,6 +32,36 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
     return colors[type] || 'text-gray-400'
   }
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="w-4 h-4 text-gray-400" />
+      case 'processing':
+        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-red-500" />
+      default:
+        return null
+    }
+  }
+
+  const getStatusText = (status: string, chunkCount: number) => {
+    switch (status) {
+      case 'pending':
+        return '等待处理'
+      case 'processing':
+        return '处理中...'
+      case 'completed':
+        return `${chunkCount} 个片段`
+      case 'failed':
+        return '处理失败'
+      default:
+        return status
+    }
+  }
+
   if (documents.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -52,9 +82,21 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
             <p className="text-sm font-medium text-gray-900 truncate">
               {doc.title}
             </p>
-            <p className="text-xs text-gray-500">
-              {formatFileSize(doc.file_size)} · {formatDate(doc.upload_time)}
-            </p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{formatFileSize(doc.file_size)}</span>
+              <span>·</span>
+              <span>{formatDate(doc.upload_time)}</span>
+              <span>·</span>
+              <div className="flex items-center gap-1">
+                {getStatusIcon(doc.status)}
+                <span>{getStatusText(doc.status, doc.chunk_count)}</span>
+              </div>
+            </div>
+            {doc.status === 'failed' && doc.error_message && (
+              <p className="text-xs text-red-500 mt-1 truncate">
+                {doc.error_message}
+              </p>
+            )}
           </div>
           <button
             onClick={() => onDelete(doc.id)}

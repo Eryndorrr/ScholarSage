@@ -1,11 +1,16 @@
 export type FileType = 'pdf' | 'docx' | 'md' | 'txt'
 
+export type ProcessStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
 export interface Document {
   id: string
   collection_id: string
   title: string
   file_type: FileType
   file_size: number
+  status: ProcessStatus
+  chunk_count: number
+  error_message: string | null
   upload_time: string
 }
 
