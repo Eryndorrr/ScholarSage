@@ -1,5 +1,5 @@
 import { Folder, Trash2 } from 'lucide-react'
-import { Collection } from '../../types/collection'
+import type { Collection } from '../../types/collection'
 
 interface CollectionCardProps {
   collection: Collection

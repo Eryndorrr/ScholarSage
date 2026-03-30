@@ -16,7 +16,7 @@ interface Message {
 
 export function ChatWindow({ collectionId }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
-  const { query, isLoading, data } = useQuery()
+  const { query, isLoading } = useQuery()
 
   const handleQuery = (question: string) => {
     setMessages((prev) => [...prev, { type: 'user', content: question }])

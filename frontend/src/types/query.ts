@@ -1,4 +1,4 @@
-import { Source } from './document'
+import type { Source } from './document'
 
 export interface QueryRequest {
   question: string

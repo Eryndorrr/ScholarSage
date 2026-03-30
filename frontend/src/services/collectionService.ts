@@ -1,5 +1,5 @@
 import { apiClient } from './api'
-import { Collection, CollectionCreate } from '../types/collection'
+import type { Collection, CollectionCreate } from '../types/collection'
 
 export const collectionService = {
   async list(): Promise<Collection[]> {

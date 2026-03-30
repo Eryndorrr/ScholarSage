@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { CollectionCreate } from '../../types/collection'
+import type { CollectionCreate } from '../../types/collection'
 
 interface CreateCollectionModalProps {
   isOpen: boolean

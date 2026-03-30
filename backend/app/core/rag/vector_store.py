@@ -26,11 +26,24 @@ class VectorStore:
             raise VectorStoreError(f"Failed to create collection: {e}")
 
     def get_collection(self, collection_name: str):
-        """获取集合"""
+        """获取集合，不存在返回None"""
         try:
             return self.client.get_collection(name=collection_name)
+        except ValueError:
+            # Collection 不存在
+            return None
         except ChromaError as e:
             raise VectorStoreError(f"Failed to get collection: {e}")
+
+    def get_or_create_collection(self, collection_name: str):
+        """获取或创建集合"""
+        try:
+            return self.client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+        except ChromaError as e:
+            raise VectorStoreError(f"Failed to get or create collection: {e}")
 
     def delete_collection(self, collection_name: str):
         """删除集合"""
@@ -49,7 +62,7 @@ class VectorStore:
     ):
         """添加文档到向量库"""
         try:
-            collection = self.get_collection(collection_name)
+            collection = self.get_or_create_collection(collection_name)
             collection.add(
                 documents=documents,
                 embeddings=embeddings,
@@ -68,6 +81,14 @@ class VectorStore:
         """检索相似文档"""
         try:
             collection = self.get_collection(collection_name)
+            if collection is None:
+                # Collection 不存在，返回空结果
+                return {
+                    'documents': [[]],
+                    'metadatas': [[]],
+                    'distances': [[]],
+                    'ids': [[]]
+                }
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k

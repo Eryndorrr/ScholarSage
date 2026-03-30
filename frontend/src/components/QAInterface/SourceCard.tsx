@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react'
-import { Source } from '../../types/document'
+import type { Source } from '../../types/document'
 
 interface SourceCardProps {
   source: Source

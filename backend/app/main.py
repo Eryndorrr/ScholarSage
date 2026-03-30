@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 from app.api import collections, documents, query
+import os
+
+# 确保数据目录存在
+os.makedirs("data", exist_ok=True)
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -17,7 +21,7 @@ app = FastAPI(
 # CORS配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
