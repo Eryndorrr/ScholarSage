@@ -6,8 +6,11 @@ from app.config import settings
 class EmbeddingEngine:
     """文本向量化引擎"""
 
-    def __init__(self, api_key: str = None, model: str = None):
-        self.client = OpenAI(api_key=api_key or settings.openai_api_key)
+    def __init__(self, api_key: str = None, model: str = None, base_url: str = None):
+        self.client = OpenAI(
+            api_key=api_key or settings.openai_api_key,
+            base_url=base_url or settings.openai_base_url
+        )
         self.model = model or settings.embedding_model
 
     def embed_text(self, text: str) -> List[float]:

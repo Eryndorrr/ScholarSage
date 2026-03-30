@@ -6,8 +6,9 @@ class Settings(BaseSettings):
     """应用配置"""
 
     # OpenAI配置
-    openai_api_key: str
+    openai_api_key: str = "sk-dummy"  # 本地部署时可使用任意值
     openai_model: str = "gpt-3.5-turbo"
+    openai_base_url: str = "https://api.openai.com/v1"  # 支持自定义API端点
     embedding_model: str = "text-embedding-ada-002"
 
     # 数据库配置

@@ -11,8 +11,11 @@ class GeneratorError(Exception):
 class Generator:
     """答案生成器"""
 
-    def __init__(self, api_key: str = None, model: str = None):
-        self.client = OpenAI(api_key=api_key or settings.openai_api_key)
+    def __init__(self, api_key: str = None, model: str = None, base_url: str = None):
+        self.client = OpenAI(
+            api_key=api_key or settings.openai_api_key,
+            base_url=base_url or settings.openai_base_url
+        )
         self.model = model or settings.openai_model
 
     def generate_answer(
