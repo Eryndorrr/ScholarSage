@@ -60,9 +60,6 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             db.commit()
     finally:
         db.close()
-            db.commit()
-    finally:
-        db.close()
 
 
 @router.post("", response_model=DocumentResponse)
