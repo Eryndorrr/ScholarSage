@@ -3,15 +3,18 @@ import type { Collection } from '../../types/collection'
 
 interface CollectionCardProps {
   collection: Collection
+  isSelected?: boolean
   onClick: () => void
   onDelete: () => void
 }
 
-export function CollectionCard({ collection, onClick, onDelete }: CollectionCardProps) {
+export function CollectionCard({ collection, isSelected, onClick, onDelete }: CollectionCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-white p-4 rounded-lg shadow-sm border-l-4 cursor-pointer hover:shadow-md transition-shadow"
+      className={`bg-white p-4 rounded-lg shadow-sm border-l-4 cursor-pointer hover:shadow-md transition-shadow ${
+        isSelected ? 'ring-2 ring-blue-500' : ''
+      }`}
       style={{ borderLeftColor: collection.color }}
     >
       <div className="flex justify-between items-start">

@@ -6,9 +6,10 @@ import { CreateCollectionModal } from './CreateCollectionModal'
 
 interface CollectionListProps {
   onSelectCollection: (id: string) => void
+  selectedId?: string | null
 }
 
-export function CollectionList({ onSelectCollection }: CollectionListProps) {
+export function CollectionList({ onSelectCollection, selectedId }: CollectionListProps) {
   const { collections, isLoading, createCollection, deleteCollection } = useCollections()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
@@ -33,6 +34,7 @@ export function CollectionList({ onSelectCollection }: CollectionListProps) {
         <CollectionCard
           key={collection.id}
           collection={collection}
+          isSelected={selectedId === collection.id}
           onClick={() => onSelectCollection(collection.id)}
           onDelete={() => deleteCollection(collection.id)}
         />
