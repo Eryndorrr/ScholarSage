@@ -6,6 +6,9 @@ from app.core.rag.embeddings import EmbeddingEngine
 from app.core.rag.vector_store import VectorStore
 from app.models.document import FileType
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentProcessor:
@@ -39,6 +42,7 @@ class DocumentProcessor:
 
         try:
             # 1. 选择解析器
+            logger.info(f"Parsing document: {file_path}")
             if file_type == FileType.PDF:
                 parser = PDFParser(file_path)
             elif file_type == FileType.DOCX:
@@ -52,12 +56,22 @@ class DocumentProcessor:
 
             # 2. 提取文本
             text = parser.extract_text()
+            logger.info(f"Extracted {len(text)} characters")
 
             # 3. 切分文本
             chunks = parser.chunk_text(chunk_size=chunk_size, overlap=overlap)
+            logger.info(f"Split into {len(chunks)} chunks")
+
+            if not chunks:
+                return {
+                    "success": False,
+                    "error": "文档内容为空或无法解析"
+                }
 
             # 4. 批量向量化
+            logger.info(f"Embedding {len(chunks)} chunks...")
             embeddings = self.embedding_engine.embed_batch(chunks)
+            logger.info(f"Embedding completed")
 
             # 5. 存储到向量库
             chunk_ids = [str(uuid.uuid4()) for _ in chunks]
@@ -70,6 +84,7 @@ class DocumentProcessor:
                 for i in range(len(chunks))
             ]
 
+            logger.info(f"Storing {len(chunks)} vectors...")
             self.vector_store.add_documents(
                 collection_name=collection_id,
                 documents=chunks,
@@ -78,6 +93,7 @@ class DocumentProcessor:
                 ids=chunk_ids
             )
 
+            logger.info(f"Document processed successfully: {len(chunks)} chunks")
             return {
                 "success": True,
                 "chunk_count": len(chunks),
@@ -85,16 +101,19 @@ class DocumentProcessor:
             }
 
         except FileNotFoundError as e:
+            logger.error(f"File not found: {e}")
             return {
                 "success": False,
                 "error": f"文件未找到: {str(e)}"
             }
         except PermissionError as e:
+            logger.error(f"Permission error: {e}")
             return {
                 "success": False,
                 "error": f"文件权限错误: {str(e)}"
             }
         except Exception as e:
+            logger.exception(f"Error processing document: {e}")
             return {
                 "success": False,
                 "error": f"处理文档时发生错误: {str(e)}"

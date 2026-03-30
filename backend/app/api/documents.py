@@ -7,6 +7,9 @@ from app.schemas import DocumentResponse
 from app.core.rag.document_processor import DocumentProcessor
 import os
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
 
@@ -20,9 +23,12 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
         # 更新状态为处理中
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
+            logger.error(f"Document {document_id} not found")
             return
+
         document.status = ProcessStatus.PROCESSING
         db.commit()
+        logger.info(f"Processing document: {document.title} ({document_id})")
 
         # 处理文档
         processor = DocumentProcessor()
@@ -37,17 +43,23 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
         if result["success"]:
             document.status = ProcessStatus.COMPLETED
             document.chunk_count = result["chunk_count"]
+            logger.info(f"Document {document_id} processed successfully: {result['chunk_count']} chunks")
         else:
             document.status = ProcessStatus.FAILED
             document.error_message = result.get("error", "Unknown error")
+            logger.error(f"Document {document_id} processing failed: {result.get('error')}")
         db.commit()
 
     except Exception as e:
+        logger.exception(f"Error processing document {document_id}: {e}")
         # 更新失败状态
         document = db.query(Document).filter(Document.id == document_id).first()
         if document:
             document.status = ProcessStatus.FAILED
             document.error_message = str(e)
+            db.commit()
+    finally:
+        db.close()
             db.commit()
     finally:
         db.close()
