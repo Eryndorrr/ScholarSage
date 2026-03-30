@@ -4,12 +4,26 @@ from app.config import settings
 from app.database import engine, Base
 from app.api import collections, documents, query
 import os
+import logging
+import sys
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # 确保数据目录存在
 os.makedirs("data", exist_ok=True)
+os.makedirs("uploads", exist_ok=True)
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
+logger.info("Database tables created")
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -31,6 +45,7 @@ app.add_middleware(
 app.include_router(collections.router)
 app.include_router(documents.router)
 app.include_router(query.router)
+logger.info("API routes registered")
 
 
 @app.get("/")
