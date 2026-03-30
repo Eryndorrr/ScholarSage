@@ -23,6 +23,8 @@ class DocumentProcessor:
         file_path: str,
         collection_id: str,
         file_type: FileType,
+        document_id: str = None,
+        document_title: str = None,
         chunk_size: int = 512,
         overlap: int = 50
     ) -> Dict:
@@ -77,9 +79,11 @@ class DocumentProcessor:
             chunk_ids = [str(uuid.uuid4()) for _ in chunks]
             metadatas = [
                 {
-                    "document_id": file_path,
+                    "document_id": document_id or file_path,
+                    "title": document_title or file_path.split("/")[-1],
                     "collection_id": collection_id,
-                    "chunk_index": i
+                    "chunk_index": i,
+                    "page": 0  # PDF解析时可扩展页码信息
                 }
                 for i in range(len(chunks))
             ]

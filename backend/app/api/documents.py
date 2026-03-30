@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
 
 
-def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType):
+def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType, document_title: str):
     """后台任务：处理文档"""
     from app.database import SessionLocal
 
@@ -35,7 +35,9 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
         result = processor.process_document(
             file_path=file_path,
             collection_id=collection_id,
-            file_type=file_type
+            file_type=file_type,
+            document_id=document_id,
+            document_title=document_title
         )
 
         # 更新处理结果
@@ -114,7 +116,8 @@ async def upload_document(
         document.id,
         file_path,
         collection_id,
-        file_type
+        file_type,
+        filename  # 传递文档标题
     )
 
     return document
