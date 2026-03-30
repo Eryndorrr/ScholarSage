@@ -13,7 +13,11 @@ class VectorStore:
     """Chroma向量存储"""
 
     def __init__(self, persist_dir: str = None):
-        self.client = chromadb.PersistentClient(path=persist_dir or settings.chroma_persist_dir)
+        # 禁用遥测以避免警告
+        self.client = chromadb.PersistentClient(
+            path=persist_dir or settings.chroma_persist_dir,
+            anonymized_telemetry=False
+        )
 
     def create_collection(self, collection_name: str):
         """创建集合"""
