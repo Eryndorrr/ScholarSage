@@ -19,6 +19,7 @@ class Collection(Base):
 
     # 关系
     documents = relationship("Document", back_populates="collection", cascade="all, delete-orphan")
+    query_history = relationship("QueryHistory", back_populates="collection", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Collection {self.name}>"

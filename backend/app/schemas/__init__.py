@@ -9,9 +9,15 @@ from app.schemas.document import (
     SourceResponse
 )
 from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.query_history import (
+    QueryHistoryCreate,
+    QueryHistoryResponse,
+    QueryHistoryListResponse
+)
 
 __all__ = [
     "CollectionCreate", "CollectionUpdate", "CollectionResponse",
     "DocumentCreate", "DocumentResponse", "SourceResponse",
-    "QueryRequest", "QueryResponse"
+    "QueryRequest", "QueryResponse",
+    "QueryHistoryCreate", "QueryHistoryResponse", "QueryHistoryListResponse"
 ]

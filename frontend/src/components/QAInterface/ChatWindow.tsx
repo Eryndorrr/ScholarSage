@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { QueryInput } from './QueryInput'
 import { SourceCard } from './SourceCard'
@@ -6,6 +6,7 @@ import { useQuery } from '../../hooks/useQuery'
 
 interface ChatWindowProps {
   collectionId: string | null
+  onQueryComplete?: () => void
 }
 
 interface Message {
@@ -14,9 +15,23 @@ interface Message {
   sources?: any[]
 }
 
-export function ChatWindow({ collectionId }: ChatWindowProps) {
+export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const { query, isLoading } = useQuery()
+
+  // 监听来自历史记录的问题选择
+  useEffect(() => {
+    const handleSetQuery = (e: CustomEvent) => {
+      const question = e.detail
+      if (question) {
+        handleQuery(question)
+      }
+    }
+    window.addEventListener('setQuery', handleSetQuery as EventListener)
+    return () => {
+      window.removeEventListener('setQuery', handleSetQuery as EventListener)
+    }
+  }, [collectionId])
 
   const handleQuery = (question: string) => {
     setMessages((prev) => [...prev, { type: 'user', content: question }])
@@ -36,6 +51,8 @@ export function ChatWindow({ collectionId }: ChatWindowProps) {
               sources: response.sources,
             },
           ])
+          // 通知父组件查询完成，刷新历史
+          onQueryComplete?.()
         },
       }
     )

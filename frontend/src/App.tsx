@@ -4,6 +4,7 @@ import { CollectionList } from './components/CollectionManager/CollectionList'
 import { ChatWindow } from './components/QAInterface/ChatWindow'
 import { DocumentUpload } from './components/DocumentManager/DocumentUpload'
 import { DocumentList } from './components/DocumentManager/DocumentList'
+import { QueryHistory } from './components/QueryHistory/QueryHistory'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
 
@@ -13,6 +14,7 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)
   const pollingRef = useRef<number | null>(null)
 
   // 加载文档列表
@@ -101,12 +103,22 @@ function App() {
     }
   }
 
+  const handleQueryComplete = () => {
+    // 刷新查询历史
+    setHistoryKey(k => k + 1)
+  }
+
+  const handleSelectQuery = (question: string) => {
+    // 可以通过事件传递问题到 ChatWindow
+    window.dispatchEvent(new CustomEvent('setQuery', { detail: question }))
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <MainLayout>
         <div className="flex gap-6">
           {/* 左侧：知识库列表 */}
-          <div className="w-80 flex-shrink-0">
+          <div className="w-72 flex-shrink-0">
             <CollectionList
               onSelectCollection={setSelectedCollection}
               selectedId={selectedCollection}
@@ -135,6 +147,15 @@ function App() {
                     />
                   )}
                 </div>
+
+                {/* 查询历史 */}
+                <div className="mt-6 pt-4 border-t">
+                  <QueryHistory
+                    key={historyKey}
+                    collectionId={selectedCollection}
+                    onSelectQuery={handleSelectQuery}
+                  />
+                </div>
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
@@ -145,7 +166,10 @@ function App() {
 
           {/* 右侧：问答界面 */}
           <div className="flex-1">
-            <ChatWindow collectionId={selectedCollection} />
+            <ChatWindow
+              collectionId={selectedCollection}
+              onQueryComplete={handleQueryComplete}
+            />
           </div>
         </div>
       </MainLayout>
