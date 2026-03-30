@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 from app.database import get_db
-from app.models import Collection
+from app.models import Collection, Document
 from app.schemas import CollectionCreate, CollectionUpdate, CollectionResponse
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -25,7 +26,22 @@ def create_collection(
 def list_collections(db: Session = Depends(get_db)):
     """获取知识库列表"""
     collections = db.query(Collection).all()
-    return {"collections": [CollectionResponse.model_validate(c) for c in collections]}
+    # 更新每个 collection 的文档数量
+    result = []
+    for c in collections:
+        count = db.query(func.count(Document.id)).filter(
+            Document.collection_id == c.id
+        ).scalar()
+        result.append(CollectionResponse(
+            id=c.id,
+            name=c.name,
+            description=c.description or "",
+            color=c.color,
+            document_count=count,
+            created_at=c.created_at,
+            updated_at=c.updated_at
+        ))
+    return {"collections": result}
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)
@@ -34,7 +50,21 @@ def get_collection(collection_id: str, db: Session = Depends(get_db)):
     collection = db.query(Collection).filter(Collection.id == collection_id).first()
     if not collection:
         raise HTTPException(status_code=404, detail="知识库不存在")
-    return collection
+
+    # 获取实际文档数量
+    count = db.query(func.count(Document.id)).filter(
+        Document.collection_id == collection_id
+    ).scalar()
+
+    return CollectionResponse(
+        id=collection.id,
+        name=collection.name,
+        description=collection.description or "",
+        color=collection.color,
+        document_count=count,
+        created_at=collection.created_at,
+        updated_at=collection.updated_at
+    )
 
 
 @router.put("/{collection_id}", response_model=CollectionResponse)
@@ -54,7 +84,21 @@ def update_collection(
 
     db.commit()
     db.refresh(collection)
-    return collection
+
+    # 获取实际文档数量
+    count = db.query(func.count(Document.id)).filter(
+        Document.collection_id == collection_id
+    ).scalar()
+
+    return CollectionResponse(
+        id=collection.id,
+        name=collection.name,
+        description=collection.description or "",
+        color=collection.color,
+        document_count=count,
+        created_at=collection.created_at,
+        updated_at=collection.updated_at
+    )
 
 
 @router.delete("/{collection_id}")
