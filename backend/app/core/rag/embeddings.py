@@ -13,8 +13,8 @@ class EmbeddingEngine:
             base_url=base_url or settings.openai_base_url
         )
         self.model = model or settings.embedding_model
-        self.batch_size = 100  # 每批最多处理的文本数量
-        self.max_workers = 3   # 并发工作线程数
+        self.batch_size = settings.embedding_batch_size
+        self.max_workers = settings.embedding_max_workers
 
     def embed_text(self, text: str) -> List[float]:
         """单个文本向量化"""

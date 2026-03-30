@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
     top_k: int = 3
 
+    # Embedding配置
+    embedding_batch_size: int = 100  # 每批API调用的文本数量
+    embedding_max_workers: int = 3   # 并发API调用数
+
     class Config:
         env_file = ".env"
         case_sensitive = False
