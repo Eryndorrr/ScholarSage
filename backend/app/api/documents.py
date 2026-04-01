@@ -147,6 +147,15 @@ def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # 删除向量数据
+    from app.core.rag.vector_store import VectorStore
+    try:
+        vector_store = VectorStore()
+        deleted_count = vector_store.delete_document(collection_id, document_id)
+        logger.info(f"Deleted {deleted_count} vectors for document {document_id}")
+    except Exception as e:
+        logger.warning(f"Failed to delete vectors: {e}")
+
     # 删除文件
     if document.file_path and os.path.exists(document.file_path):
         os.remove(document.file_path)

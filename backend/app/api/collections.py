@@ -2,11 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
+import logging
 from app.database import get_db
 from app.models import Collection, Document
 from app.schemas import CollectionCreate, CollectionUpdate, CollectionResponse
+from app.core.rag.vector_store import VectorStore
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=CollectionResponse)
@@ -108,6 +111,29 @@ def delete_collection(collection_id: str, db: Session = Depends(get_db)):
     if not collection:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
+    # 获取该知识库的所有文档
+    documents = db.query(Document).filter(Document.collection_id == collection_id).all()
+
+    # 删除向量数据（删除整个collection）
+    try:
+        vector_store = VectorStore()
+        vector_store.delete_collection(collection_id)
+        logger.info(f"Deleted vector collection {collection_id}")
+    except Exception as e:
+        # 集合可能不存在，忽略错误
+        logger.warning(f"Failed to delete vector collection: {e}")
+
+    # 删除文档文件
+    import os
+    for doc in documents:
+        if doc.file_path and os.path.exists(doc.file_path):
+            try:
+                os.remove(doc.file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete file {doc.file_path}: {e}")
+
+    # 删除数据库记录（级联删除文档）
     db.delete(collection)
     db.commit()
-    return {"success": True, "message": "知识库已删除"}
+
+    return {"success": True, "message": "知识库已删除", "deleted_documents": len(documents)}

@@ -60,9 +60,20 @@ class DocumentProcessor:
             text = parser.extract_text()
             logger.info(f"Extracted {len(text)} characters")
 
-            # 3. 切分文本
-            chunks = parser.chunk_text(chunk_size=chunk_size, overlap=overlap)
-            logger.info(f"Split into {len(chunks)} chunks")
+            # 3. 切分文本 - PDF使用页码感知切分
+            chunk_ids = [str(uuid.uuid4()) for _ in range(10000)]  # 预生成足够的ID
+
+            if file_type == FileType.PDF and hasattr(parser, 'chunk_text_with_pages'):
+                # PDF使用页码感知切分
+                chunks_with_pages = parser.chunk_text_with_pages(chunk_size=chunk_size, overlap=overlap)
+                chunks = [c for c, p in chunks_with_pages]
+                page_numbers = [p for c, p in chunks_with_pages]
+                logger.info(f"Split into {len(chunks)} chunks with page info")
+            else:
+                # 其他文件类型使用普通切分
+                chunks = parser.chunk_text(chunk_size=chunk_size, overlap=overlap)
+                page_numbers = None
+                logger.info(f"Split into {len(chunks)} chunks")
 
             if not chunks:
                 return {
@@ -76,14 +87,14 @@ class DocumentProcessor:
             logger.info(f"Embedding completed")
 
             # 5. 存储到向量库
-            chunk_ids = [str(uuid.uuid4()) for _ in chunks]
+            chunk_ids = chunk_ids[:len(chunks)]
             metadatas = [
                 {
                     "document_id": document_id or file_path,
                     "title": document_title or file_path.split("/")[-1],
                     "collection_id": collection_id,
                     "chunk_index": i,
-                    "page": 0  # PDF解析时可扩展页码信息
+                    "page": page_numbers[i] if page_numbers else 0
                 }
                 for i in range(len(chunks))
             ]

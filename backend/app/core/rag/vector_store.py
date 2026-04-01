@@ -100,3 +100,31 @@ class VectorStore:
             return results
         except ChromaError as e:
             raise VectorStoreError(f"Failed to search: {e}")
+
+    def delete_document(self, collection_name: str, document_id: str) -> int:
+        """删除指定文档的所有向量块，返回删除的数量"""
+        try:
+            collection = self.get_collection(collection_name)
+            if collection is None:
+                return 0
+
+            # 先查询该文档的所有chunk
+            results = collection.get(
+                where={"document_id": document_id}
+            )
+
+            if not results or not results.get('ids'):
+                return 0
+
+            # 删除这些向量
+            collection.delete(ids=results['ids'])
+            return len(results['ids'])
+        except ChromaError as e:
+            raise VectorStoreError(f"Failed to delete document vectors: {e}")
+
+    def delete_collection(self, collection_name: str):
+        """删除集合"""
+        try:
+            self.client.delete_collection(name=collection_name)
+        except ChromaError as e:
+            raise VectorStoreError(f"Failed to delete collection: {e}")
