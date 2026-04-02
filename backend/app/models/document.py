@@ -33,6 +33,7 @@ class Document(Base):
     file_type = Column(SQLEnum(FileType), nullable=False)
     file_size = Column(Integer, default=0)
     status = Column(SQLEnum(ProcessStatus), default=ProcessStatus.PENDING)
+    progress = Column(Integer, default=0)  # 处理进度 0-100
     chunk_count = Column(Integer, default=0)
     error_message = Column(String(500), nullable=True)
     upload_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))

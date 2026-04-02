@@ -4,6 +4,7 @@ import { CollectionList } from './components/CollectionManager/CollectionList'
 import { ChatWindow } from './components/QAInterface/ChatWindow'
 import { DocumentUpload } from './components/DocumentManager/DocumentUpload'
 import { DocumentList } from './components/DocumentManager/DocumentList'
+import { DocumentPreview } from './components/DocumentManager/DocumentPreview'
 import { QueryHistory } from './components/QueryHistory/QueryHistory'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
@@ -15,6 +16,7 @@ function App() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
   const pollingRef = useRef<number | null>(null)
 
   // 加载文档列表
@@ -143,7 +145,9 @@ function App() {
                   ) : (
                     <DocumentList
                       documents={documents}
+                      collectionId={selectedCollection}
                       onDelete={handleDeleteDocument}
+                      onPreview={setPreviewDocument}
                     />
                   )}
                 </div>
@@ -172,6 +176,17 @@ function App() {
             />
           </div>
         </div>
+
+        {/* 文档预览弹窗 */}
+        {previewDocument && selectedCollection && (
+          <DocumentPreview
+            collectionId={selectedCollection}
+            documentId={previewDocument.id}
+            documentTitle={previewDocument.title}
+            fileType={previewDocument.file_type}
+            onClose={() => setPreviewDocument(null)}
+          />
+        )}
       </MainLayout>
     </QueryClientProvider>
   )

@@ -1,12 +1,14 @@
-import { FileText, Trash2, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { FileText, Trash2, Loader2, CheckCircle, XCircle, Clock, Eye } from 'lucide-react'
 import type { Document } from '../../types/document'
 
 interface DocumentListProps {
   documents: Document[]
+  collectionId: string
   onDelete: (documentId: string) => void
+  onPreview: (document: Document) => void
 }
 
-export function DocumentList({ documents, onDelete }: DocumentListProps) {
+export function DocumentList({ documents, collectionId, onDelete, onPreview }: DocumentListProps) {
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -47,12 +49,12 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
     }
   }
 
-  const getStatusText = (status: string, chunkCount: number) => {
+  const getStatusText = (status: string, chunkCount: number, progress: number) => {
     switch (status) {
       case 'pending':
         return '等待处理'
       case 'processing':
-        return '处理中...'
+        return `处理中 ${progress}%`
       case 'completed':
         return `${chunkCount} 个片段`
       case 'failed':
@@ -89,21 +91,40 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
               <span>·</span>
               <div className="flex items-center gap-1">
                 {getStatusIcon(doc.status)}
-                <span>{getStatusText(doc.status, doc.chunk_count)}</span>
+                <span>{getStatusText(doc.status, doc.chunk_count, doc.progress || 0)}</span>
               </div>
             </div>
+            {/* 进度条 */}
+            {doc.status === 'processing' && (
+              <div className="mt-1.5 w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${doc.progress || 0}%` }}
+                />
+              </div>
+            )}
             {doc.status === 'failed' && doc.error_message && (
               <p className="text-xs text-red-500 mt-1 truncate">
                 {doc.error_message}
               </p>
             )}
           </div>
-          <button
-            onClick={() => onDelete(doc.id)}
-            className="text-gray-400 hover:text-red-500 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onPreview(doc)}
+              className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+              title="预览"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onDelete(doc.id)}
+              className="text-gray-400 hover:text-red-500 transition-colors p-1"
+              title="删除"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       ))}
     </div>

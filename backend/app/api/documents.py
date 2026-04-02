@@ -27,8 +27,16 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             return
 
         document.status = ProcessStatus.PROCESSING
+        document.progress = 0
         db.commit()
         logger.info(f"Processing document: {document.title} ({document_id})")
+
+        # 进度回调函数
+        def update_progress(progress: int):
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            if doc:
+                doc.progress = progress
+                db.commit()
 
         # 处理文档
         processor = DocumentProcessor()
@@ -37,13 +45,15 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             collection_id=collection_id,
             file_type=file_type,
             document_id=document_id,
-            document_title=document_title
+            document_title=document_title,
+            progress_callback=update_progress
         )
 
         # 更新处理结果
         document = db.query(Document).filter(Document.id == document_id).first()
         if result["success"]:
             document.status = ProcessStatus.COMPLETED
+            document.progress = 100
             document.chunk_count = result["chunk_count"]
             logger.info(f"Document {document_id} processed successfully: {result['chunk_count']} chunks")
         else:
@@ -165,3 +175,92 @@ def delete_document(
     db.commit()
 
     return {"success": True, "message": "Document deleted"}
+
+
+@router.get("/{document_id}/content")
+def get_document_content(
+    collection_id: str,
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取文档内容（用于预览）"""
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.collection_id == collection_id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not document.file_path or not os.path.exists(document.file_path):
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    try:
+        # 根据文件类型解析内容
+        if document.file_type == FileType.PDF:
+            from app.core.parsers.pdf_parser import PDFParser
+            parser = PDFParser(document.file_path)
+            content = parser.extract_text()
+        elif document.file_type == FileType.DOCX:
+            from app.core.parsers.word_parser import WordParser
+            parser = WordParser(document.file_path)
+            content = parser.extract_text()
+        elif document.file_type == FileType.MD:
+            with open(document.file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            with open(document.file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+        # 限制返回内容长度
+        max_length = 50000
+        if len(content) > max_length:
+            content = content[:max_length] + "\n\n... (内容过长，已截断)"
+
+        return {
+            "title": document.title,
+            "content": content,
+            "file_type": document.file_type.value,
+            "char_count": len(content)
+        }
+    except Exception as e:
+        logger.error(f"Failed to read document content: {e}")
+        raise HTTPException(status_code=500, detail=f"读取文档失败: {str(e)}")
+
+
+from fastapi.responses import FileResponse, Response
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    collection_id: str,
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取文档文件（用于PDF预览）"""
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.collection_id == collection_id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not document.file_path or not os.path.exists(document.file_path):
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    # 读取文件内容
+    with open(document.file_path, 'rb') as f:
+        content = f.read()
+
+    media_type = "application/pdf" if document.file_type == FileType.PDF else "application/octet-stream"
+
+    # 使用 inline 让浏览器预览而不是下载
+    # 使用简单的 ASCII 文件名避免编码问题
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": "inline",
+            "Content-Length": str(len(content))
+        }
+    )

@@ -9,6 +9,7 @@ export interface Document {
   file_type: FileType
   file_size: number
   status: ProcessStatus
+  progress: number
   chunk_count: number
   error_message: string | null
   upload_time: string

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Callable
 from app.core.parsers.pdf_parser import PDFParser
 from app.core.parsers.markdown_parser import MarkdownParser
 from app.core.parsers.word_parser import WordParser
@@ -26,9 +26,14 @@ class DocumentProcessor:
         document_id: str = None,
         document_title: str = None,
         chunk_size: int = 512,
-        overlap: int = 50
+        overlap: int = 50,
+        progress_callback: Callable[[int], None] = None
     ) -> Dict:
         """处理文档：解析 -> 切分 -> 向量化 -> 存储"""
+
+        def update_progress(progress: int):
+            if progress_callback:
+                progress_callback(progress)
 
         # 输入验证
         if not file_path or not isinstance(file_path, str):
@@ -43,7 +48,8 @@ class DocumentProcessor:
             raise ValueError("overlap必须是非负整数")
 
         try:
-            # 1. 选择解析器
+            # 1. 选择解析器 (0-10%)
+            update_progress(5)
             logger.info(f"Parsing document: {file_path}")
             if file_type == FileType.PDF:
                 parser = PDFParser(file_path)
@@ -56,11 +62,14 @@ class DocumentProcessor:
             else:
                 raise ValueError(f"不支持的文件类型: {file_type}")
 
-            # 2. 提取文本
+            # 2. 提取文本 (10-25%)
+            update_progress(15)
             text = parser.extract_text()
+            update_progress(25)
             logger.info(f"Extracted {len(text)} characters")
 
-            # 3. 切分文本 - PDF使用页码感知切分
+            # 3. 切分文本 (25-35%)
+            update_progress(30)
             chunk_ids = [str(uuid.uuid4()) for _ in range(10000)]  # 预生成足够的ID
 
             if file_type == FileType.PDF and hasattr(parser, 'chunk_text_with_pages'):
@@ -75,18 +84,22 @@ class DocumentProcessor:
                 page_numbers = None
                 logger.info(f"Split into {len(chunks)} chunks")
 
+            update_progress(35)
+
             if not chunks:
                 return {
                     "success": False,
                     "error": "文档内容为空或无法解析"
                 }
 
-            # 4. 批量向量化
+            # 4. 批量向量化 (35-85%)
             logger.info(f"Embedding {len(chunks)} chunks...")
             embeddings = self.embedding_engine.embed_batch(chunks)
+            update_progress(85)
             logger.info(f"Embedding completed")
 
-            # 5. 存储到向量库
+            # 5. 存储到向量库 (85-100%)
+            update_progress(90)
             chunk_ids = chunk_ids[:len(chunks)]
             metadatas = [
                 {
@@ -108,6 +121,7 @@ class DocumentProcessor:
                 ids=chunk_ids
             )
 
+            update_progress(100)
             logger.info(f"Document processed successfully: {len(chunks)} chunks")
             return {
                 "success": True,
