@@ -15,35 +15,26 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview }: D
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('zh-CN', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  const getFileTypeIcon = (type: string) => {
+  const getFileTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      pdf: 'text-red-500',
-      docx: 'text-blue-500',
-      md: 'text-gray-500',
-      txt: 'text-gray-400',
+      pdf: 'text-red-500 bg-red-50',
+      docx: 'text-blue-500 bg-blue-50',
+      md: 'text-purple-500 bg-purple-50',
+      txt: 'text-gray-500 bg-gray-100',
     }
-    return colors[type] || 'text-gray-400'
+    return colors[type] || 'text-gray-500 bg-gray-100'
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-gray-400" />
+        return <Clock className="w-3.5 h-3.5 text-gray-400" />
       case 'processing':
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+        return <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
       case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
+        return <CheckCircle className="w-3.5 h-3.5 text-green-500" />
       case 'failed':
-        return <XCircle className="w-4 h-4 text-red-500" />
+        return <XCircle className="w-3.5 h-3.5 text-red-500" />
       default:
         return null
     }
@@ -54,11 +45,11 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview }: D
       case 'pending':
         return '等待处理'
       case 'processing':
-        return `处理中 ${progress}%`
+        return `${progress}%`
       case 'completed':
-        return `${chunkCount} 个片段`
+        return `${chunkCount} 片段`
       case 'failed':
-        return '处理失败'
+        return '失败'
       default:
         return status
     }
@@ -66,8 +57,8 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview }: D
 
   if (documents.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        暂无文档，点击上方按钮上传
+      <div className="text-center py-8 text-gray-400 text-sm">
+        暂无文档
       </div>
     )
   }
@@ -77,53 +68,55 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview }: D
       {documents.map((doc) => (
         <div
           key={doc.id}
-          className="flex items-center gap-3 p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow"
+          className="group bg-white rounded-lg p-3 border hover:shadow-sm transition-all"
         >
-          <FileText className={`w-5 h-5 ${getFileTypeIcon(doc.file_type)}`} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {doc.title}
-            </p>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>{formatFileSize(doc.file_size)}</span>
-              <span>·</span>
-              <span>{formatDate(doc.upload_time)}</span>
-              <span>·</span>
-              <div className="flex items-center gap-1">
-                {getStatusIcon(doc.status)}
-                <span>{getStatusText(doc.status, doc.chunk_count, doc.progress || 0)}</span>
-              </div>
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded ${getFileTypeColor(doc.file_type)}`}>
+              <FileText className="w-4 h-4" />
             </div>
-            {/* 进度条 */}
-            {doc.status === 'processing' && (
-              <div className="mt-1.5 w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${doc.progress || 0}%` }}
-                />
-              </div>
-            )}
-            {doc.status === 'failed' && doc.error_message && (
-              <p className="text-xs text-red-500 mt-1 truncate">
-                {doc.error_message}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 truncate">
+                {doc.title}
               </p>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onPreview(doc)}
-              className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-              title="预览"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onDelete(doc.id)}
-              className="text-gray-400 hover:text-red-500 transition-colors p-1"
-              title="删除"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                <span>{formatFileSize(doc.file_size)}</span>
+                <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                <div className="flex items-center gap-1">
+                  {getStatusIcon(doc.status)}
+                  <span>{getStatusText(doc.status, doc.chunk_count, doc.progress || 0)}</span>
+                </div>
+              </div>
+              {/* 进度条 */}
+              {doc.status === 'processing' && (
+                <div className="mt-2 w-full bg-gray-200 rounded-full h-1">
+                  <div
+                    className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+                    style={{ width: `${doc.progress || 0}%` }}
+                  />
+                </div>
+              )}
+              {doc.status === 'failed' && doc.error_message && (
+                <p className="text-xs text-red-500 mt-1 truncate">
+                  {doc.error_message}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => onPreview(doc)}
+                className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                title="预览"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onDelete(doc.id)}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                title="删除"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       ))}

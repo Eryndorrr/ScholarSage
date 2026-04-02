@@ -21,5 +21,6 @@ export interface Source {
   page: number
   snippet: string
   relevance_score: number
-  collection_name: string
+  collection_name?: string
+  collection_id?: string
 }

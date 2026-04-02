@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useCollections } from '../../hooks/useCollections'
-import { CollectionCard } from './CollectionCard'
 import { CreateCollectionModal } from './CreateCollectionModal'
 
 interface CollectionListProps {
@@ -14,37 +13,60 @@ export function CollectionList({ onSelectCollection, selectedId }: CollectionLis
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   if (isLoading) {
-    return <div className="text-center py-8">加载中...</div>
+    return <div className="text-center py-4 text-gray-500 text-sm">加载中...</div>
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">知识库</h2>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          新建
-        </button>
-      </div>
-
+    <div className="space-y-1">
       {collections.map((collection) => (
-        <CollectionCard
+        <div
           key={collection.id}
-          collection={collection}
-          isSelected={selectedId === collection.id}
           onClick={() => onSelectCollection(collection.id)}
-          onDelete={() => deleteCollection(collection.id)}
-        />
+          className={`group flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all ${
+            selectedId === collection.id
+              ? 'bg-blue-50 border border-blue-200'
+              : 'hover:bg-gray-100 border border-transparent'
+          }`}
+        >
+          <div
+            className="w-3 h-3 rounded-full flex-shrink-0"
+            style={{ backgroundColor: collection.color || '#3b82f6' }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">
+              {collection.name}
+            </p>
+            <p className="text-xs text-gray-500">
+              {collection.document_count || 0} 个文档
+            </p>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm('确定删除此知识库？')) {
+                deleteCollection(collection.id)
+              }
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       ))}
 
       {collections.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          还没有知识库，点击"新建"创建第一个
+        <div className="text-center py-6 text-gray-400 text-sm">
+          暂无知识库
         </div>
       )}
+
+      <button
+        onClick={() => setIsCreateModalOpen(true)}
+        className="w-full flex items-center justify-center gap-1.5 p-2 text-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-dashed border-gray-300 hover:border-blue-300"
+      >
+        <Plus className="w-4 h-4" />
+        新建知识库
+      </button>
 
       <CreateCollectionModal
         isOpen={isCreateModalOpen}

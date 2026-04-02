@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MainLayout } from './components/Layout/MainLayout'
+import { Header } from './components/Layout/Header'
 import { CollectionList } from './components/CollectionManager/CollectionList'
 import { ChatWindow } from './components/QAInterface/ChatWindow'
 import { DocumentUpload } from './components/DocumentManager/DocumentUpload'
@@ -8,6 +9,7 @@ import { DocumentPreview } from './components/DocumentManager/DocumentPreview'
 import { QueryHistory } from './components/QueryHistory/QueryHistory'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
+import { FileText, History, Upload, FolderOpen, MessageSquare } from 'lucide-react'
 
 const queryClient = new QueryClient()
 
@@ -17,6 +19,7 @@ function App() {
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
+  const [activeTab, setActiveTab] = useState<'documents' | 'history'>('documents')
   const pollingRef = useRef<number | null>(null)
 
   // 加载文档列表
@@ -56,18 +59,15 @@ function App() {
       return
     }
 
-    // 检查是否有处理中的文档
     const hasProcessingDocs = documents.some(
       doc => doc.status === 'pending' || doc.status === 'processing'
     )
 
     if (hasProcessingDocs && !pollingRef.current) {
-      // 开始轮询
       pollingRef.current = window.setInterval(() => {
         fetchDocuments()
-      }, 2000) // 每2秒刷新一次
+      }, 2000)
     } else if (!hasProcessingDocs && pollingRef.current) {
-      // 停止轮询
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
@@ -81,7 +81,6 @@ function App() {
   }, [selectedCollection, documents])
 
   const handleUploadComplete = async () => {
-    // 刷新文档列表
     const data = await fetchDocuments()
     if (data) {
       setDocuments(data)
@@ -106,75 +105,139 @@ function App() {
   }
 
   const handleQueryComplete = () => {
-    // 刷新查询历史
     setHistoryKey(k => k + 1)
   }
 
-  const handleSelectQuery = (question: string) => {
-    // 可以通过事件传递问题到 ChatWindow
-    window.dispatchEvent(new CustomEvent('setQuery', { detail: question }))
+  const handleRequery = (question: string) => {
+    window.dispatchEvent(new CustomEvent('requery', { detail: question }))
+    setActiveTab('documents') // 切换回文档标签以便看到对话
   }
 
   return (
     <QueryClientProvider client={queryClient}>
       <MainLayout>
-        <div className="flex gap-6">
-          {/* 左侧：知识库列表 */}
-          <div className="w-72 flex-shrink-0">
-            <CollectionList
-              onSelectCollection={setSelectedCollection}
-              selectedId={selectedCollection}
-            />
-          </div>
+        <Header />
 
-          {/* 中间：文档管理 */}
-          <div className="w-80 flex-shrink-0">
+        <div className="flex-1 flex overflow-hidden">
+          {/* 左侧边栏：知识库 */}
+          <aside className="w-64 bg-white border-r flex flex-col">
+            <div className="p-4 border-b">
+              <div className="flex items-center gap-2 text-gray-600">
+                <FolderOpen className="w-4 h-4" />
+                <span className="text-sm font-medium">知识库</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              <CollectionList
+                onSelectCollection={setSelectedCollection}
+                selectedId={selectedCollection}
+              />
+            </div>
+          </aside>
+
+          {/* 中间面板：文档管理/历史 */}
+          <aside className="w-80 bg-gray-50 border-r flex flex-col">
             {selectedCollection ? (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900">文档管理</h3>
-                <DocumentUpload
-                  collectionId={selectedCollection}
-                  onUploadComplete={handleUploadComplete}
-                />
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">
-                    已上传文档 ({documents.length})
-                  </h4>
-                  {isLoadingDocs ? (
-                    <div className="text-center py-4 text-gray-500">加载中...</div>
+              <>
+                {/* Tab 切换 */}
+                <div className="flex border-b bg-white">
+                  <button
+                    onClick={() => setActiveTab('documents')}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                      activeTab === 'documents'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    文档
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                      activeTab === 'history'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <History className="w-4 h-4" />
+                    历史
+                  </button>
+                </div>
+
+                {/* 内容区域 */}
+                <div className="flex-1 overflow-y-auto">
+                  {activeTab === 'documents' ? (
+                    <div className="p-4 space-y-4">
+                      {/* 上传区域 */}
+                      <div className="bg-white rounded-lg p-4 shadow-sm">
+                        <div className="flex items-center gap-2 mb-3 text-gray-700">
+                          <Upload className="w-4 h-4" />
+                          <span className="text-sm font-medium">上传文档</span>
+                        </div>
+                        <DocumentUpload
+                          collectionId={selectedCollection}
+                          onUploadComplete={handleUploadComplete}
+                        />
+                      </div>
+
+                      {/* 文档列表 */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600">
+                            已上传 {documents.length} 个文档
+                          </span>
+                        </div>
+                        {isLoadingDocs ? (
+                          <div className="text-center py-4 text-gray-500">加载中...</div>
+                        ) : (
+                          <DocumentList
+                            documents={documents}
+                            collectionId={selectedCollection}
+                            onDelete={handleDeleteDocument}
+                            onPreview={setPreviewDocument}
+                          />
+                        )}
+                      </div>
+                    </div>
                   ) : (
-                    <DocumentList
-                      documents={documents}
-                      collectionId={selectedCollection}
-                      onDelete={handleDeleteDocument}
-                      onPreview={setPreviewDocument}
-                    />
+                    <div className="p-4">
+                      <QueryHistory
+                        key={historyKey}
+                        collectionId={selectedCollection}
+                        onRequery={handleRequery}
+                      />
+                    </div>
                   )}
                 </div>
-
-                {/* 查询历史 */}
-                <div className="mt-6 pt-4 border-t">
-                  <QueryHistory
-                    key={historyKey}
-                    collectionId={selectedCollection}
-                    onSelectQuery={handleSelectQuery}
-                  />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400">
+                <div className="text-center">
+                  <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">选择一个知识库开始</p>
                 </div>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                请先选择一个知识库
-              </div>
             )}
-          </div>
+          </aside>
 
           {/* 右侧：问答界面 */}
-          <div className="flex-1">
-            <ChatWindow
-              collectionId={selectedCollection}
-              onQueryComplete={handleQueryComplete}
-            />
-          </div>
+          <main className="flex-1 flex flex-col bg-white">
+            {selectedCollection ? (
+              <ChatWindow
+                collectionId={selectedCollection}
+                onQueryComplete={handleQueryComplete}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400">
+                <div className="text-center">
+                  <MessageSquare className="w-16 h-16 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium text-gray-500">开始对话</p>
+                  <p className="text-sm mt-1">选择左侧知识库后即可提问</p>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
 
         {/* 文档预览弹窗 */}
