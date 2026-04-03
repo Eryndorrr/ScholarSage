@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import QueryRequest, QueryResponse
-from app.models import QueryHistory, Collection
+from app.models import QueryHistory, Collection, Session, SessionMessage
 from app.core.rag.retriever import Retriever
 from app.core.rag.generator import Generator
+from app.core.rag.dialog_manager import DialogManager
 from functools import lru_cache
 import time
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,15 +28,40 @@ def get_generator() -> Generator:
     return Generator()
 
 
+@lru_cache()
+def get_dialog_manager() -> DialogManager:
+    """Get DialogManager instance (singleton)"""
+    return DialogManager()
+
+
 @router.post("", response_model=QueryResponse)
 def query(
     request: QueryRequest,
     db: Session = Depends(get_db),
     retriever: Retriever = Depends(get_retriever),
-    generator: Generator = Depends(get_generator)
+    generator: Generator = Depends(get_generator),
+    dialog_manager: DialogManager = Depends(get_dialog_manager)
 ):
-    """智能问答"""
+    """智能问答（支持多轮对话）"""
     start_time = time.time()
+
+    # 获取或创建会话
+    session = None
+    history = []
+    summary = None
+
+    if request.session_id:
+        session = db.query(Session).filter(Session.id == request.session_id).first()
+        if session:
+            # 获取历史消息
+            messages = db.query(SessionMessage).filter(
+                SessionMessage.session_id == session.id
+            ).order_by(SessionMessage.created_at).all()
+
+            history = [{"role": m.role, "content": m.content} for m in messages]
+            summary = session.summary
+
+            logger.info(f"Session {session.id}: {len(history)} history messages, has_summary: {bool(summary)}")
 
     # 检索相关文档
     collection_name = request.collection_id if not request.search_all else "all"
@@ -44,11 +71,13 @@ def query(
         top_k=request.top_k
     )
 
-    # 生成答案
+    # 生成答案（支持多轮上下文）
     contexts = [r['content'] for r in results]
     answer = generator.generate_answer(
         question=request.question,
-        contexts=contexts
+        contexts=contexts,
+        history=history,
+        summary=summary
     )
 
     # 计算响应时间
@@ -60,7 +89,6 @@ def query(
     confidence_sum = 0.0
     for r in results:
         distance = r.get('distance')
-        # 安全处理distance为None或不在有效范围的情况
         if distance is not None and 0 <= distance <= 1:
             relevance_score = 1 - distance
             confidence_sum += relevance_score
@@ -75,13 +103,47 @@ def query(
             collection_name=r['metadata'].get('collection_name', '')
         ))
 
-    # 修复：安全计算置信度，避免除以零
     confidence = confidence_sum / len(results) if results else 0.0
 
-    # 保存查询历史
+    # 保存到会话
+    if request.session_id and session:
+        # 保存用户消息
+        user_msg = SessionMessage(
+            session_id=session.id,
+            role="user",
+            content=request.question
+        )
+        db.add(user_msg)
+
+        # 保存助手消息
+        assistant_msg = SessionMessage(
+            session_id=session.id,
+            role="assistant",
+            content=answer,
+            sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False)
+        )
+        db.add(assistant_msg)
+
+        # 更新会话统计
+        session.message_count += 2
+
+        # 检查是否需要生成摘要
+        if dialog_manager.should_summarize(session.message_count, session.summary):
+            # 获取所有消息用于摘要
+            all_messages = db.query(SessionMessage).filter(
+                SessionMessage.session_id == session.id
+            ).order_by(SessionMessage.created_at).all()
+
+            msg_list = [{"role": m.role, "content": m.content} for m in all_messages]
+            session.summary = dialog_manager.generate_summary(msg_list)
+            logger.info(f"Generated summary for session {session.id}")
+
+        db.commit()
+
+    # 保存查询历史（兼容旧版本）
     if request.collection_id:
         try:
-            history = QueryHistory(
+            history_record = QueryHistory(
                 collection_id=request.collection_id,
                 question=request.question,
                 answer=answer,
@@ -89,7 +151,7 @@ def query(
                 confidence=confidence,
                 response_time=response_time
             )
-            db.add(history)
+            db.add(history_record)
             db.commit()
             logger.info(f"Query history saved: {request.question[:50]}...")
         except Exception as e:
@@ -111,7 +173,6 @@ def get_query_history(
     db: Session = Depends(get_db)
 ):
     """获取知识库的查询历史"""
-    # 验证 collection 存在
     collection = db.query(Collection).filter(Collection.id == collection_id).first()
     if not collection:
         from fastapi import HTTPException

@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     """查询请求"""
     question: str = Field(..., min_length=1, max_length=1000)
     collection_id: Optional[str] = None
+    session_id: Optional[str] = None  # 会话ID（多轮对话）
     search_all: bool = False
     top_k: int = Field(default=3, ge=1, le=10)
     include_sources: bool = True

@@ -4,10 +4,15 @@ import { QueryInput } from './QueryInput'
 import { SourceCard } from './SourceCard'
 import { useQuery } from '../../hooks/useQuery'
 import type { Source } from '../../types/document'
+import type { SessionMessage } from '../../types/session'
 
 interface ChatWindowProps {
   collectionId: string | null
-  onQueryComplete?: () => void
+  sessionId: string | null
+  sessionMessages: SessionMessage[]
+  sessionTitle: string | null
+  onQueryComplete: () => void
+  onUpdateTitle?: (title: string) => void
 }
 
 interface Message {
@@ -16,18 +21,33 @@ interface Message {
   sources?: Source[]
 }
 
-export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
+export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTitle, onQueryComplete, onUpdateTitle }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [previewSource, setPreviewSource] = useState<Source | null>(null)
   const { query, isLoading } = useQuery()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isFirstQuery = useRef(true)
+
+  // 同步 session 消息到本地状态
+  useEffect(() => {
+    const convertedMessages: Message[] = []
+    for (const msg of sessionMessages) {
+      convertedMessages.push({
+        type: msg.role as 'user' | 'ai',
+        content: msg.content,
+        sources: msg.sources ? JSON.parse(msg.sources) : undefined
+      })
+    }
+    setMessages(convertedMessages)
+    isFirstQuery.current = sessionMessages.length === 0
+  }, [sessionMessages])
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 监听来自历史记录的重新提问
+  // 监听重新提问
   useEffect(() => {
     const handleRequery = (e: CustomEvent) => {
       const question = e.detail
@@ -39,7 +59,7 @@ export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
     return () => {
       window.removeEventListener('requery', handleRequery as EventListener)
     }
-  }, [collectionId])
+  }, [collectionId, sessionId])
 
   const handleQuery = (question: string) => {
     setMessages((prev) => [...prev, { type: 'user', content: question }])
@@ -47,7 +67,8 @@ export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
     query(
       {
         question,
-        collection_id: collectionId || undefined
+        collection_id: collectionId || undefined,
+        session_id: sessionId || undefined
       },
       {
         onSuccess: (response) => {
@@ -59,7 +80,15 @@ export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
               sources: response.sources,
             },
           ])
-          onQueryComplete?.()
+
+          // 第一次提问时更新标题
+          if (isFirstQuery.current && onUpdateTitle) {
+            const title = question.length > 20 ? question.slice(0, 20) + '...' : question
+            onUpdateTitle(title)
+            isFirstQuery.current = false
+          }
+
+          onQueryComplete()
         },
       }
     )
@@ -81,8 +110,11 @@ export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <p className="text-lg font-medium text-gray-500 mb-1">开始提问</p>
+              <p className="text-lg font-medium text-gray-500 mb-1">开始对话</p>
               <p className="text-sm">基于已上传的文档进行智能问答</p>
+              {sessionTitle && (
+                <p className="text-xs text-gray-400 mt-2">当前对话：{sessionTitle}</p>
+              )}
             </div>
           </div>
         ) : (
@@ -130,7 +162,7 @@ export function ChatWindow({ collectionId, onQueryComplete }: ChatWindowProps) {
       {/* 输入区域 */}
       <div className="border-t p-4 bg-gray-50">
         <div className="max-w-3xl mx-auto">
-          <QueryInput onSubmit={handleQuery} disabled={isLoading} />
+          <QueryInput onSubmit={handleQuery} disabled={isLoading || !collectionId} />
         </div>
       </div>
 
