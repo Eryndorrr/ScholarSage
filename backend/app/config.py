@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ragas_api_key: Optional[str] = None  # 评估用 API Key，默认使用 openai_api_key
     ragas_model: str = "gpt-3.5-turbo"  # 评估用模型
     ragas_base_url: Optional[str] = None  # 评估用 API 端点，默认使用 openai_base_url
+    use_ragas_evaluation: bool = False  # 是否使用 RAGAS 评估（默认使用增强的备用方法）
 
     # 数据库配置
     database_url: str = "sqlite:///./data/knowledge.db"

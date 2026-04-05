@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from app.core.rag.retriever import Retriever, RetrieverError
 from app.core.rag.generator import Generator, GeneratorError
@@ -177,8 +179,8 @@ class RAGASEvaluator:
                 contexts=contexts
             )
 
-            # 3. 使用 RAGAS 计算指标
-            metrics = self._calculate_ragas_metrics(
+            # 3. 计算评估指标（优先使用增强的备用方法，RAGAS作为可选）
+            metrics = self._calculate_metrics(
                 question=question,
                 answer=answer,
                 contexts=contexts
@@ -209,6 +211,39 @@ class RAGASEvaluator:
                 "error": str(e)
             }
 
+    def _calculate_metrics(
+        self,
+        question: str,
+        answer: str,
+        contexts: List[str]
+    ) -> Dict[str, float]:
+        """
+        计算评估指标（默认使用增强的备用方法）
+
+        Args:
+            question: 问题
+            answer: 答案
+            contexts: 上下文列表
+
+        Returns:
+            评估指标字典
+        """
+        from app.config import settings
+
+        # 检查是否强制使用 RAGAS（通过环境变量配置）
+        use_ragas = getattr(settings, 'use_ragas_evaluation', False)
+
+        if use_ragas:
+            logger.info("Attempting RAGAS evaluation (configured)")
+            ragas_metrics = self._calculate_ragas_metrics(question, answer, contexts)
+            # 如果 RAGAS 成功返回有效指标，使用它
+            if ragas_metrics and any(v is not None for v in ragas_metrics.values()):
+                return ragas_metrics
+            logger.warning("RAGAS returned invalid metrics, falling back to enhanced method")
+
+        # 默认使用增强的备用方法
+        return self._calculate_enhanced_metrics(question, answer, contexts)
+
     def _calculate_ragas_metrics(
         self,
         question: str,
@@ -216,7 +251,7 @@ class RAGASEvaluator:
         contexts: List[str]
     ) -> Dict[str, float]:
         """
-        使用 RAGAS 计算评估指标
+        使用 RAGAS 计算评估指标（可选）
 
         Args:
             question: 问题
@@ -328,13 +363,13 @@ class RAGASEvaluator:
             return metrics
 
         except ImportError as e:
-            logger.warning(f"RAGAS not installed: {e}, using fallback metrics")
-            return self._calculate_fallback_metrics(question, answer, contexts)
+            logger.warning(f"RAGAS not installed: {e}")
+            return {"faithfulness": None, "answer_relevancy": None, "context_precision": None}
         except Exception as e:
             logger.error(f"RAGAS evaluation failed: {e}")
-            return self._calculate_fallback_metrics(question, answer, contexts)
+            return {"faithfulness": None, "answer_relevancy": None, "context_precision": None}
 
-    def _calculate_fallback_metrics(
+    def _calculate_enhanced_metrics(
         self,
         question: str,
         answer: str,
@@ -342,10 +377,23 @@ class RAGASEvaluator:
     ) -> Dict[str, float]:
         """
         备用评估方法（当 RAGAS 不可用时）
-        使用简单的启发式方法估算指标
+        模拟 RAGAS 的评估逻辑
         """
         from openai import OpenAI
         from app.config import settings
+        import json
+        import re
+
+        logger.info("Using enhanced fallback metrics calculation")
+
+        # 如果没有上下文或答案，返回默认值
+        if not contexts or not answer:
+            logger.warning("Empty contexts or answer, returning default metrics")
+            return {
+                "faithfulness": None,
+                "answer_relevancy": None,
+                "context_precision": None
+            }
 
         client = OpenAI(
             api_key=settings.openai_api_key,
@@ -355,78 +403,187 @@ class RAGASEvaluator:
         metrics = {}
 
         try:
-            # 1. 评估答案忠实度（答案是否基于上下文）
-            faithfulness_prompt = f"""请评估以下答案是否忠实于给定的上下文。
-答案是否只使用了上下文中的信息，没有添加未经证实的内容？
+            # ========== 1. Faithfulness（忠实度）==========
+            # 步骤1: 将答案分解成陈述
+            statements_prompt = f"""请将以下答案分解成独立的陈述句。
+每个陈述句应该是一个可以独立判断真假的简单句子。
 
-上下文：
-{chr(10).join(contexts[:2])}
+答案：{answer}
 
-答案：
-{answer}
-
-请给出一个 0 到 1 的分数（0=完全不忠实，1=完全忠实），只输出数字。"""
+请以 JSON 数组格式返回，例如：["陈述1", "陈述2", "陈述3"]
+只输出 JSON 数组，不要其他内容。"""
 
             response = client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[{"role": "user", "content": faithfulness_prompt}],
-                max_tokens=10,
+                messages=[{"role": "user", "content": statements_prompt}],
+                max_tokens=500,
                 temperature=0
             )
-            try:
-                metrics["faithfulness"] = float(response.choices[0].message.content.strip())
-            except ValueError:
-                metrics["faithfulness"] = 0.5
 
-            # 2. 评估答案相关性
-            relevancy_prompt = f"""请评估以下答案与问题的相关程度。
+            statements = []
+            try:
+                content = response.choices[0].message.content.strip()
+                # 提取 JSON 数组
+                json_match = re.search(r'\[.*\]', content, re.DOTALL)
+                if json_match:
+                    statements = json.loads(json_match.group())
+            except (json.JSONDecodeError, AttributeError):
+                # 如果解析失败，按句子分割
+                statements = [s.strip() for s in answer.split('。') if s.strip()]
+
+            if not statements:
+                statements = [answer]
+
+            # 步骤2: 判断每个陈述是否能从上下文推断
+            context_text = "\n".join(contexts)
+            faithful_count = 0
+
+            for statement in statements[:5]:  # 最多评估5个陈述
+                verify_prompt = f"""给定以下上下文，判断陈述是否可以从上下文中直接推断出来。
+
+上下文：
+{context_text[:2000]}
+
+陈述：{statement}
+
+如果陈述可以从上下文推断，输出 "yes"，否则输出 "no"。
+只输出 yes 或 no。"""
+
+                response = client.chat.completions.create(
+                    model=settings.openai_model,
+                    messages=[{"role": "user", "content": verify_prompt}],
+                    max_tokens=10,
+                    temperature=0
+                )
+                if "yes" in response.choices[0].message.content.lower():
+                    faithful_count += 1
+
+            metrics["faithfulness"] = faithful_count / len(statements[:5]) if statements else 0.5
+
+            # ========== 2. Answer Relevancy（答案相关性）==========
+            # 基于答案生成问题，判断与原问题的相似度
+            gen_questions_prompt = f"""基于以下答案，生成3个可能导致这个答案的问题。
+
+答案：{answer}
+
+请以 JSON 数组格式返回，例如：["问题1", "问题2", "问题3"]
+只输出 JSON 数组。"""
+
+            response = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{"role": "user", "content": gen_questions_prompt}],
+                max_tokens=200,
+                temperature=0.3
+            )
+
+            generated_questions = []
+            try:
+                content = response.choices[0].message.content.strip()
+                json_match = re.search(r'\[.*\]', content, re.DOTALL)
+                if json_match:
+                    generated_questions = json.loads(json_match.group())
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+            # 判断生成的问题与原问题的相关性
+            if generated_questions:
+                relevancy_scores = []
+                for gen_q in generated_questions[:3]:
+                    compare_prompt = f"""判断以下两个问题是否在询问相同或相似的内容。
+
+原问题：{question}
+生成的问题：{gen_q}
+
+如果两个问题意图相同或非常相似，输出 "1"。
+如果有一定相关性，输出 "0.5"。
+如果完全不相关，输出 "0"。
+只输出数字。"""
+
+                    response = client.chat.completions.create(
+                        model=settings.openai_model,
+                        messages=[{"role": "user", "content": compare_prompt}],
+                        max_tokens=10,
+                        temperature=0
+                    )
+                    try:
+                        score = float(re.search(r'[\d.]+', response.choices[0].message.content).group())
+                        relevancy_scores.append(min(1.0, max(0.0, score)))
+                    except:
+                        relevancy_scores.append(0.5)
+
+                metrics["answer_relevancy"] = sum(relevancy_scores) / len(relevancy_scores)
+            else:
+                # 备用：直接评估相关性
+                direct_relevancy_prompt = f"""评估答案是否完整回答了问题。
 
 问题：{question}
 答案：{answer}
 
-请给出一个 0 到 1 的分数（0=完全不相关，1=完全相关），只输出数字。"""
+评分标准：
+1.0 - 答案完整准确地回答了问题
+0.7 - 答案大部分相关，但有遗漏
+0.5 - 答案部分相关
+0.3 - 答案相关性较低
+0.0 - 答案完全不相关
 
-            response = client.chat.completions.create(
-                model=settings.openai_model,
-                messages=[{"role": "user", "content": relevancy_prompt}],
-                max_tokens=10,
-                temperature=0
-            )
-            try:
-                metrics["answer_relevancy"] = float(response.choices[0].message.content.strip())
-            except ValueError:
-                metrics["answer_relevancy"] = 0.5
+只输出分数数字。"""
 
-            # 3. 评估上下文精确度
-            precision_prompt = f"""请评估以下检索的上下文与问题的相关程度。
+                response = client.chat.completions.create(
+                    model=settings.openai_model,
+                    messages=[{"role": "user", "content": direct_relevancy_prompt}],
+                    max_tokens=10,
+                    temperature=0
+                )
+                try:
+                    metrics["answer_relevancy"] = min(1.0, max(0.0, float(re.search(r'[\d.]+', response.choices[0].message.content).group())))
+                except:
+                    metrics["answer_relevancy"] = 0.5
+
+            # ========== 3. Context Precision（上下文精确度）==========
+            # 评估每个上下文片段与问题的相关性
+            precision_scores = []
+
+            for i, ctx in enumerate(contexts[:3]):  # 评估前3个上下文
+                ctx_relevance_prompt = f"""判断以下上下文片段是否与问题相关，能否帮助回答问题。
 
 问题：{question}
-上下文数量：{len(contexts)}
 
-第一个上下文片段：
-{contexts[0][:500] if contexts else ''}
+上下文片段：
+{ctx[:500]}
 
-检索到的上下文中有多少是真正相关的？请给出一个 0 到 1 的分数，只输出数字。"""
+如果上下文直接相关且能帮助回答问题，输出 "1"。
+如果上下文有一定相关性，输出 "0.5"。
+如果上下文完全不相关，输出 "0"。
+只输出数字。"""
 
-            response = client.chat.completions.create(
-                model=settings.openai_model,
-                messages=[{"role": "user", "content": precision_prompt}],
-                max_tokens=10,
-                temperature=0
-            )
-            try:
-                metrics["context_precision"] = float(response.choices[0].message.content.strip())
-            except ValueError:
-                metrics["context_precision"] = 0.5
+                response = client.chat.completions.create(
+                    model=settings.openai_model,
+                    messages=[{"role": "user", "content": ctx_relevance_prompt}],
+                    max_tokens=10,
+                    temperature=0
+                )
+                try:
+                    score = float(re.search(r'[\d.]+', response.choices[0].message.content).group())
+                    precision_scores.append(min(1.0, max(0.0, score)))
+                except:
+                    precision_scores.append(0.5)
+
+            metrics["context_precision"] = sum(precision_scores) / len(precision_scores) if precision_scores else 0.5
 
         except Exception as e:
-            logger.error(f"Fallback metrics calculation failed: {e}")
+            logger.error(f"Enhanced fallback metrics calculation failed: {e}")
             metrics = {
                 "faithfulness": 0.5,
                 "answer_relevancy": 0.5,
                 "context_precision": 0.5
             }
 
+        # 确保所有值都在 0-1 范围内
+        for key in metrics:
+            if metrics[key] is not None:
+                metrics[key] = round(min(1.0, max(0.0, metrics[key])), 4)
+
+        logger.info(f"Enhanced fallback metrics: {metrics}")
         return metrics
 
     def run_evaluation(
@@ -437,7 +594,7 @@ class RAGASEvaluator:
         parameters: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        执行完整评估
+        执行完整评估（并发执行）
 
         Args:
             evaluation_id: 评估记录ID
@@ -449,6 +606,8 @@ class RAGASEvaluator:
             汇总的评估结果
         """
         db = SessionLocal()
+        progress_lock = threading.Lock()
+        processed_count = [0]  # 使用列表以便在闭包中修改
 
         try:
             # 更新状态为运行中
@@ -466,27 +625,76 @@ class RAGASEvaluator:
 
             top_k = parameters.get("top_k", 3)
 
-            # 评估每个问题
-            detailed_results = []
-            processed = 0
+            # 并发评估问题
+            detailed_results = [None] * len(questions)  # 预分配列表保持顺序
 
-            for question in questions:
+            def evaluate_with_index(index: int, question: str) -> tuple:
+                """评估单个问题并返回索引和结果"""
                 result = self.evaluate_single_question(
                     question=question,
                     collection_name=collection_name,
                     top_k=top_k
                 )
-                detailed_results.append(result)
-                processed += 1
+                return index, result
 
-                # 更新进度
-                evaluation.processed_questions = processed
-                db.commit()
+            # 使用线程池并发执行，默认最多3个并发
+            max_workers = min(3, len(questions))
+            logger.info(f"Starting concurrent evaluation with {max_workers} workers for {len(questions)} questions")
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # 提交所有任务
+                future_to_index = {
+                    executor.submit(evaluate_with_index, i, q): i
+                    for i, q in enumerate(questions)
+                }
+
+                # 收集结果并更新进度
+                for future in as_completed(future_to_index):
+                    try:
+                        index, result = future.result()
+                        detailed_results[index] = result
+
+                        # 线程安全地更新进度
+                        with progress_lock:
+                            processed_count[0] += 1
+                            # 每完成一个就更新数据库
+                            try:
+                                db_update = SessionLocal()
+                                eval_update = db_update.query(Evaluation).filter(
+                                    Evaluation.id == evaluation_id
+                                ).first()
+                                if eval_update:
+                                    eval_update.processed_questions = processed_count[0]
+                                    db_update.commit()
+                                db_update.close()
+                            except Exception as e:
+                                logger.warning(f"Failed to update progress: {e}")
+
+                        logger.info(f"Completed question {processed_count[0]}/{len(questions)}")
+
+                    except Exception as e:
+                        logger.error(f"Question evaluation failed: {e}")
+                        idx = future_to_index[future]
+                        detailed_results[idx] = {
+                            "question": questions[idx],
+                            "answer": "",
+                            "contexts": [],
+                            "context_sources": [],
+                            "faithfulness": None,
+                            "answer_relevancy": None,
+                            "context_precision": None,
+                            "context_recall": None,
+                            "error": str(e)
+                        }
+
+            # 过滤掉可能的 None 值
+            detailed_results = [r for r in detailed_results if r is not None]
 
             # 计算平均指标
             avg_metrics = self._calculate_average_metrics(detailed_results)
 
-            # 更新评估记录
+            # 重新获取评估记录并更新
+            db.refresh(evaluation)
             evaluation.status = EvaluationStatus.COMPLETED
             evaluation.metrics = avg_metrics
             evaluation.detailed_results = detailed_results
@@ -495,6 +703,8 @@ class RAGASEvaluator:
                 evaluation.completed_at - evaluation.started_at
             ).total_seconds()
             db.commit()
+
+            logger.info(f"Evaluation completed in {evaluation.execution_time:.2f}s")
 
             return {
                 "metrics": avg_metrics,
