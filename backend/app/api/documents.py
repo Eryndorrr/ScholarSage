@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Document, Collection, FileType, ProcessStatus
+from app.models import Document, Collection, FileType, ProcessStatus, Paper
 from app.schemas import DocumentResponse
 from app.core.rag.document_processor import DocumentProcessor
 import os
@@ -139,6 +139,16 @@ def list_documents(collection_id: str, db: Session = Depends(get_db)):
     documents = db.query(Document).filter(
         Document.collection_id == collection_id
     ).all()
+
+    # 检查每个文档是否有对应的论文记录
+    doc_ids = [doc.id for doc in documents]
+    papers = db.query(Paper).filter(Paper.document_id.in_(doc_ids)).all() if doc_ids else []
+    parsed_doc_ids = {paper.document_id for paper in papers}
+
+    # 为每个文档添加解析状态
+    for doc in documents:
+        doc.has_paper = doc.id in parsed_doc_ids
+
     return documents
 
 

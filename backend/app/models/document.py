@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -36,11 +36,13 @@ class Document(Base):
     progress = Column(Integer, default=0)  # 处理进度 0-100
     chunk_count = Column(Integer, default=0)
     error_message = Column(String(500), nullable=True)
+    has_paper = Column(Boolean, default=False)  # 是否已解析为论文
     upload_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # 关系
     collection = relationship("Collection", back_populates="documents")
     chunks = relationship("Chunk", back_populates="document", cascade="all, delete-orphan")
+    paper = relationship("Paper", back_populates="document", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Document {self.title}>"

@@ -12,6 +12,7 @@ export interface Document {
   progress: number
   chunk_count: number
   error_message: string | null
+  has_paper: boolean  // 是否已解析为论文
   upload_time: string
 }
 

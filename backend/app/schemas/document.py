@@ -24,6 +24,7 @@ class DocumentResponse(DocumentBase):
     status: ProcessStatus
     chunk_count: int
     error_message: Optional[str] = None
+    has_paper: bool = False  # 是否已解析为论文
     upload_time: datetime
 
     class Config:
