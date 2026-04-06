@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import type { CitationGraphData, PaperNode } from '../../types/graph'
+import { useGraphRenderer } from './hooks/useGraphRenderer'
+import { isWebGLSupported } from './graph/renderer'
+import { getLODLevel } from './graph/lod'
 
 interface CitationGraphProps {
   data: CitationGraphData
@@ -20,205 +21,43 @@ export function CitationGraph({
   minCitations,
   onChangeMinCitations
 }: CitationGraphProps) {
-  const chartRef = useRef<HTMLDivElement>(null)
-  const chartInstance = useRef<echarts.ECharts | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [selectedNode, setSelectedNode] = useState<PaperNode | null>(null)
+  const [webGLEnabled, setWebGLEnabled] = useState(false)
 
+  // 检测 WebGL 支持
   useEffect(() => {
-    if (!chartRef.current || !data.nodes.length) return
+    setWebGLEnabled(isWebGLSupported())
+  }, [])
 
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current)
+  // 使用渲染 Hook
+  const { isLoading, error, viewport, nodeCount, edgeCount } = useGraphRenderer({
+    containerRef,
+    data,
+    showExternal,
+    onNodeClick: (node) => {
+      setSelectedNode(node)
+      onNodeClick?.(node)
+    },
+  })
+
+  // 计算 LOD 层级
+  const lodLevel = useMemo(() => {
+    return viewport ? getLODLevel(viewport.zoom) : 'near'
+  }, [viewport])
+
+  // 计算显示数据统计
+  const displayStats = useMemo(() => {
+    const internalNodes = data.nodes.filter(n => n.type === 'internal')
+    const externalNodes = showExternal ? data.nodes.filter(n => n.type === 'external') : []
+
+    return {
+      totalPapers: internalNodes.length,
+      externalReferences: externalNodes.length,
+      internalCitations: data.stats.internal_citations,
+      externalCitations: showExternal ? data.stats.external_citations : 0,
     }
-
-    // 显示内部节点 + 根据开关决定是否显示外部节点
-    let displayNodes = data.nodes.filter(n => n.type === 'internal')
-    let displayEdges = data.edges.filter(e => e.type === 'internal_cite')
-
-    if (showExternal) {
-      const externalNodes = data.nodes.filter(n => n.type === 'external')
-      const externalEdges = data.edges.filter(e => e.type === 'external_cite')
-      displayNodes = [...displayNodes, ...externalNodes]
-      displayEdges = [...displayEdges, ...externalEdges]
-    }
-
-    // 准备节点数据
-    const nodes = displayNodes.map((node) => {
-      const isInternal = node.type === 'internal'
-      const totalCitations = node.incoming_citations + node.outgoing_citations
-
-      return {
-        id: node.id,
-        name: node.title.length > 25 ? node.title.slice(0, 25) + '...' : node.title,
-        fullName: node.title,
-        symbolSize: isInternal
-          ? Math.max(30, Math.min(60, 30 + node.incoming_citations * 8))
-          : Math.max(18, Math.min(35, 18 + node.incoming_citations * 3)),
-        category: isInternal ? 'internal' : 'external',
-        value: totalCitations,
-        itemStyle: {
-          color: isInternal
-            ? getInternalNodeColor(node.incoming_citations)
-            : '#9ca3af',
-          borderColor: isInternal ? '#1e40af' : '#6b7280',
-          borderWidth: isInternal ? 2 : 1,
-        },
-        label: {
-          show: isInternal,
-          fontSize: isInternal ? 11 : 9,
-          color: isInternal ? '#1f2937' : '#6b7280',
-        },
-        data: node,
-      }
-    })
-
-    // 准备边数据
-    const edges = displayEdges.map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      value: 1,
-      lineStyle: {
-        color: edge.type === 'internal_cite' ? '#3b82f6' : '#9ca3af',
-        width: edge.type === 'internal_cite' ? 2 : 1,
-        curveness: 0.3,
-        type: edge.type === 'internal_cite' ? 'solid' as const : 'dashed' as const,
-      },
-      symbol: ['none', 'arrow'],
-      symbolSize: [0, edge.type === 'internal_cite' ? 10 : 6],
-    }))
-
-    const option: EChartsOption = {
-      title: {
-        text: '论文引用关系图谱',
-        left: 'center',
-        top: 10,
-        textStyle: {
-          fontSize: 16,
-          fontWeight: 'bold',
-        },
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: (params: any) => {
-          if (params.dataType === 'node') {
-            const node = params.data.data as PaperNode
-            const isInternal = node.type === 'internal'
-
-            let html = `
-              <div style="max-width: 320px;">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${isInternal ? '#3b82f6' : '#9ca3af'};"></span>
-                  <strong style="color: ${isInternal ? '#1f2937' : '#6b7280'};">
-                    ${isInternal ? '' : '[外部] '}${node.title}
-                  </strong>
-                </div>
-            `
-
-            if (node.authors.length > 0) {
-              html += `<div style="color: #666;">作者: ${node.authors.slice(0, 3).join(', ')}${node.authors.length > 3 ? '...' : ''}</div>`
-            }
-            if (node.year) {
-              html += `<div style="color: #666;">年份: ${node.year}</div>`
-            }
-
-            html += `
-              <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #eee;">
-                <span style="color: #3b82f6;">↑ 被引: ${node.incoming_citations}</span>
-                <span style="margin-left: 12px; color: #10b981;">↓ 引用: ${node.outgoing_citations}</span>
-              </div>
-            `
-
-            if (isInternal && node.external_cite_count > 0) {
-              html += `<div style="color: #f59e0b; margin-top: 2px;">📄 外部引用: ${node.external_cite_count}</div>`
-            }
-
-            html += '</div>'
-            return html
-          } else if (params.dataType === 'edge') {
-            const edge = data.edges.find(e => e.source === params.data.source && e.target === params.data.target)
-            const sourceNode = displayNodes.find(n => n.id === params.data.source)
-            const targetNode = displayNodes.find(n => n.id === params.data.target)
-            if (sourceNode && targetNode) {
-              const isInternal = edge?.type === 'internal_cite'
-              return `
-                <div style="max-width: 300px;">
-                  <strong>${isInternal ? '内部引用' : '外部引用'}</strong><br/>
-                  <span style="color: #3b82f6;">${sourceNode.title.length > 35 ? sourceNode.title.slice(0, 35) + '...' : sourceNode.title}</span><br/>
-                  <span style="color: ${isInternal ? '#666' : '#999'};">↓ 引用了</span><br/>
-                  <span style="color: ${isInternal ? '#10b981' : '#9ca3af'};">${targetNode.title.length > 35 ? targetNode.title.slice(0, 35) + '...' : targetNode.title}</span>
-                </div>
-              `
-            }
-          }
-          return ''
-        },
-      },
-      legend: {
-        data: [
-          { name: 'internal', itemStyle: { color: '#3b82f6' } },
-          { name: 'external', itemStyle: { color: '#9ca3af' } },
-        ],
-        orient: 'vertical',
-        right: 10,
-        top: 50,
-        formatter: (name: string) => name === 'internal' ? '知识库内论文' : '外部参考文献',
-      },
-      series: [
-        {
-          type: 'graph',
-          layout: 'force',
-          data: nodes,
-          links: edges,
-          categories: [
-            { name: 'internal', itemStyle: { color: '#3b82f6' } },
-            { name: 'external', itemStyle: { color: '#9ca3af' } },
-          ],
-          roam: true,
-          draggable: true,
-          force: {
-            repulsion: 350,
-            edgeLength: [100, 250],
-            gravity: 0.08,
-          },
-          emphasis: {
-            focus: 'adjacency',
-            lineStyle: {
-              width: 3,
-            },
-          },
-          label: {
-            position: 'right',
-            formatter: '{b}',
-          },
-          lineStyle: {
-            opacity: 0.7,
-          },
-          edgeSymbol: ['none', 'arrow'],
-          edgeSymbolSize: [0, 10],
-        },
-      ],
-    }
-
-    chartInstance.current.setOption(option, true)
-
-    // 点击事件
-    chartInstance.current.on('click', (params: any) => {
-      if (params.dataType === 'node') {
-        const node = params.data.data as PaperNode
-        setSelectedNode(node)
-        onNodeClick?.(node)
-      }
-    })
-
-    const handleResize = () => {
-      chartInstance.current?.resize()
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [data, showExternal, onNodeClick])
+  }, [data, showExternal])
 
   if (!data.nodes.length) {
     return (
@@ -233,6 +72,23 @@ export function CitationGraph({
 
   return (
     <div className="h-full relative">
+      {/* 加载状态 */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-20">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-500">渲染中...</p>
+          </div>
+        </div>
+      )}
+
+      {/* 错误状态 */}
+      {error && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-lg shadow z-20">
+          {error}
+        </div>
+      )}
+
       {/* 控制面板 */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
         <div className="flex gap-2">
@@ -266,28 +122,35 @@ export function CitationGraph({
             💡 只显示被引 ≥ {minCitations} 次的外部文献
           </div>
         )}
+
+        {/* 性能指示器 */}
+        <div className="text-xs text-gray-400 bg-white/90 px-2 py-1 rounded shadow">
+          {webGLEnabled ? '🎮 WebGL' : '📱 Canvas'} |
+          {nodeCount} 节点 | LOD: {lodLevel}
+        </div>
       </div>
 
-      <div ref={chartRef} className="w-full h-full" />
+      {/* 图表容器 */}
+      <div ref={containerRef} className="w-full h-full" />
 
       {/* 统计信息和图例 */}
       <div className="absolute bottom-4 left-4 bg-white/90 rounded-lg shadow p-3 text-sm">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-2">
           <div>
             <span className="text-gray-500">知识库论文：</span>
-            <span className="font-medium">{data.stats.total_papers}</span>
+            <span className="font-medium">{displayStats.totalPapers}</span>
           </div>
           <div>
             <span className="text-gray-500">外部文献：</span>
-            <span className="font-medium">{data.stats.external_references}</span>
+            <span className="font-medium">{displayStats.externalReferences}</span>
           </div>
           <div>
             <span className="text-gray-500">内部引用：</span>
-            <span className="font-medium text-blue-600">{data.stats.internal_citations}</span>
+            <span className="font-medium text-blue-600">{displayStats.internalCitations}</span>
           </div>
           <div>
             <span className="text-gray-500">外部引用：</span>
-            <span className="font-medium text-gray-500">{data.stats.external_citations}</span>
+            <span className="font-medium text-gray-500">{displayStats.externalCitations}</span>
           </div>
         </div>
         <div className="text-xs text-gray-500 border-t pt-2 mt-2">
@@ -313,7 +176,7 @@ export function CitationGraph({
 
       {/* 选中节点详情 */}
       {selectedNode && (
-        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs">
+        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-10">
           <div className="flex justify-between items-start mb-2">
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${selectedNode.type === 'internal' ? 'bg-blue-500' : 'bg-gray-400'}`}></span>
@@ -372,12 +235,4 @@ export function CitationGraph({
       )}
     </div>
   )
-}
-
-// 根据被引次数获取内部节点颜色
-function getInternalNodeColor(incomingCitations: number): string {
-  if (incomingCitations >= 3) return '#dc2626' // red-600
-  if (incomingCitations >= 2) return '#f97316' // orange-500
-  if (incomingCitations >= 1) return '#eab308' // yellow-500
-  return '#3b82f6' // blue-500
 }
