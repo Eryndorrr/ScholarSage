@@ -13,6 +13,11 @@ export const DEFAULT_RENDER_CONFIG: RenderConfig = {
 }
 
 /**
+ * 节点数阈值：超过此值使用 WebGL，否则使用 Canvas
+ */
+export const WEBGL_NODE_THRESHOLD = 500
+
+/**
  * 检测 WebGL 支持
  */
 export function isWebGLSupported(): boolean {
@@ -23,6 +28,18 @@ export function isWebGLSupported(): boolean {
   } catch (e) {
     return false
   }
+}
+
+/**
+ * 根据节点数量决定是否使用 WebGL
+ */
+export function shouldUseWebGL(nodeCount: number): boolean {
+  // 节点数小于阈值时使用 Canvas
+  if (nodeCount < WEBGL_NODE_THRESHOLD) {
+    return false
+  }
+  // 节点数大于阈值时，检查 WebGL 支持
+  return isWebGLSupported()
 }
 
 /**
@@ -80,13 +97,11 @@ export function prepareNodeData(
 
 /**
  * 准备边渲染数据
+ * 注意：边的样式由 createGraphOption 中的 series.lineStyle 和 edgeSymbol 统一控制
  */
 export function prepareEdgeData(
-  edges: any[],
-  zoom: number = 1
+  edges: any[]
 ): EdgeRenderData[] {
-  const lodConfig = getLODConfig(zoom)
-
   return edges.map((edge) => {
     const isInternal = edge.type === 'internal_cite'
 
@@ -96,12 +111,12 @@ export function prepareEdgeData(
       value: 1,
       lineStyle: {
         color: isInternal ? '#3b82f6' : '#9ca3af',
-        width: lodConfig.edgeWidth * (isInternal ? 1 : 0.5),
+        width: isInternal ? 2 : 1,
         curveness: 0.3,
         type: isInternal ? 'solid' : 'dashed',
       },
-      symbol: lodConfig.showArrow ? ['none', 'arrow'] as const : ['none', 'none'] as const,
-      symbolSize: [0, lodConfig.showArrow ? (isInternal ? 10 : 6) : 0],
+      symbol: ['none', 'arrow'] as const,
+      symbolSize: [0, isInternal ? 10 : 6],
     }
   })
 }
@@ -112,7 +127,8 @@ export function prepareEdgeData(
 export function createGraphOption(
   nodes: NodeRenderData[],
   edges: EdgeRenderData[],
-  config: RenderConfig = DEFAULT_RENDER_CONFIG
+  config: RenderConfig = DEFAULT_RENDER_CONFIG,
+  useWebGL: boolean = false
 ): EChartsOption {
   return {
     title: {
@@ -150,15 +166,15 @@ export function createGraphOption(
         ],
         roam: true,
         draggable: true,
-        // 性能优化配置
-        progressive: config.progressive,
-        progressiveThreshold: config.progressiveThreshold,
+        // 性能优化配置（仅在大数据量时启用）
+        progressive: useWebGL ? config.progressive : 0,
+        progressiveThreshold: useWebGL ? config.progressiveThreshold : Infinity,
         // 力导向布局配置
         force: {
           repulsion: 350,
           edgeLength: [100, 250],
           gravity: 0.08,
-          layoutAnimation: false, // 关闭布局动画提升性能
+          layoutAnimation: true,
         },
         emphasis: {
           focus: 'adjacency',
@@ -173,12 +189,13 @@ export function createGraphOption(
         lineStyle: {
           opacity: 0.7,
         },
+        // 边箭头配置（统一在这里设置，不在 prepareEdgeData 中设置）
         edgeSymbol: ['none', 'arrow'],
         edgeSymbolSize: [0, 10],
       },
     ],
     // WebGL 渲染配置
-    useWebGL: config.useWebGL && isWebGLSupported(),
+    useWebGL,
   }
 }
 

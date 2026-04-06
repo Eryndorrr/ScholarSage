@@ -5,11 +5,11 @@ import type { CitationGraphData, PaperNode } from '../../../types/graph'
 import type { RenderConfig, ViewportState } from '../graph/types'
 import {
   DEFAULT_RENDER_CONFIG,
-  isWebGLSupported,
   createGraphOption,
   prepareNodeData,
   prepareEdgeData,
   createTooltipFormatter,
+  shouldUseWebGL,
 } from '../graph/renderer'
 import { getViewportFromChart } from '../graph/viewport'
 
@@ -28,6 +28,7 @@ interface UseGraphRendererResult {
   viewport: ViewportState | null
   nodeCount: number
   edgeCount: number
+  useWebGL: boolean
 }
 
 export function useGraphRenderer({
@@ -43,6 +44,7 @@ export function useGraphRenderer({
   const [viewport, setViewport] = useState<ViewportState | null>(null)
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
+  const [useWebGL, setUseWebGL] = useState(false)
   const displayNodesRef = useRef<any[]>([])
   const displayEdgesRef = useRef<any[]>([])
 
@@ -50,11 +52,10 @@ export function useGraphRenderer({
   useEffect(() => {
     if (!containerRef.current) return
 
-    const useWebGL = config.useWebGL && isWebGLSupported()
-
     if (!chartInstance.current) {
+      // 始终使用 canvas 渲染器，WebGL 通过 useWebGL 选项控制
       chartInstance.current = echarts.init(containerRef.current, undefined, {
-        renderer: useWebGL ? undefined : 'canvas', // echarts-gl 自动处理
+        renderer: 'canvas',
       })
     }
 
@@ -82,7 +83,7 @@ export function useGraphRenderer({
       chartInstance.current?.off('georoam', handleRoam)
       window.removeEventListener('resize', handleResize)
     }
-  }, [containerRef, config.useWebGL])
+  }, [containerRef])
 
   // 更新数据
   useEffect(() => {
@@ -113,8 +114,12 @@ export function useGraphRenderer({
       setNodeCount(nodeData.length)
       setEdgeCount(edgeData.length)
 
+      // 根据节点数量决定是否使用 WebGL
+      const shouldUseWebGLMode = shouldUseWebGL(nodeData.length)
+      setUseWebGL(shouldUseWebGLMode)
+
       // 创建配置
-      const option = createGraphOption(nodeData, edgeData, config)
+      const option = createGraphOption(nodeData, edgeData, config, shouldUseWebGLMode)
 
       // 设置 tooltip 格式化
       if (option.tooltip && !Array.isArray(option.tooltip)) {
@@ -153,5 +158,6 @@ export function useGraphRenderer({
     viewport,
     nodeCount,
     edgeCount,
+    useWebGL,
   }
 }

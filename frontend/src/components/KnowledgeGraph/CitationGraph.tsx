@@ -1,7 +1,6 @@
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import type { CitationGraphData, PaperNode } from '../../types/graph'
 import { useGraphRenderer } from './hooks/useGraphRenderer'
-import { isWebGLSupported } from './graph/renderer'
 import { getLODLevel } from './graph/lod'
 
 interface CitationGraphProps {
@@ -23,15 +22,9 @@ export function CitationGraph({
 }: CitationGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedNode, setSelectedNode] = useState<PaperNode | null>(null)
-  const [webGLEnabled, setWebGLEnabled] = useState(false)
-
-  // 检测 WebGL 支持
-  useEffect(() => {
-    setWebGLEnabled(isWebGLSupported())
-  }, [])
 
   // 使用渲染 Hook
-  const { isLoading, error, viewport, nodeCount } = useGraphRenderer({
+  const { isLoading, error, viewport, nodeCount, useWebGL } = useGraphRenderer({
     containerRef,
     data,
     showExternal,
@@ -125,8 +118,7 @@ export function CitationGraph({
 
         {/* 性能指示器 */}
         <div className="text-xs text-gray-400 bg-white/90 px-2 py-1 rounded shadow">
-          {webGLEnabled ? '🎮 WebGL' : '📱 Canvas'} |
-          {nodeCount} 节点 | LOD: {lodLevel}
+          {useWebGL ? '🎮 WebGL' : '📱 Canvas'} | {nodeCount} 节点 | LOD: {lodLevel}
         </div>
       </div>
 
