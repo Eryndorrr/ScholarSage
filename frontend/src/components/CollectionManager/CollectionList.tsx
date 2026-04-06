@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Pencil } from 'lucide-react'
 import { useCollections } from '../../hooks/useCollections'
 import { CreateCollectionModal } from './CreateCollectionModal'
+import { EditCollectionModal } from './EditCollectionModal'
+import type { Collection } from '../../types/collection'
 
 interface CollectionListProps {
   onSelectCollection: (id: string) => void
@@ -9,8 +11,9 @@ interface CollectionListProps {
 }
 
 export function CollectionList({ onSelectCollection, selectedId }: CollectionListProps) {
-  const { collections, isLoading, createCollection, deleteCollection } = useCollections()
+  const { collections, isLoading, createCollection, updateCollection, deleteCollection } = useCollections()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null)
 
   if (isLoading) {
     return <div className="text-center py-4 text-gray-500 text-sm">加载中...</div>
@@ -40,17 +43,30 @@ export function CollectionList({ onSelectCollection, selectedId }: CollectionLis
               {collection.document_count || 0} 个文档
             </p>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              if (confirm('确定删除此知识库？')) {
-                deleteCollection(collection.id)
-              }
-            }}
-            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingCollection(collection)
+              }}
+              className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
+              title="编辑"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm('确定删除此知识库？')) {
+                  deleteCollection(collection.id)
+                }
+              }}
+              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+              title="删除"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       ))}
 
@@ -72,6 +88,13 @@ export function CollectionList({ onSelectCollection, selectedId }: CollectionLis
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={createCollection}
+      />
+
+      <EditCollectionModal
+        isOpen={editingCollection !== null}
+        onClose={() => setEditingCollection(null)}
+        onSubmit={updateCollection}
+        collection={editingCollection}
       />
     </div>
   )

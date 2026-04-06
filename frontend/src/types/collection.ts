@@ -13,3 +13,9 @@ export interface CollectionCreate {
   description?: string
   color?: string
 }
+
+export interface CollectionUpdate {
+  name?: string
+  description?: string
+  color?: string
+}

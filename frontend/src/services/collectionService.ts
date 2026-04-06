@@ -1,5 +1,5 @@
 import { apiClient } from './api'
-import type { Collection, CollectionCreate } from '../types/collection'
+import type { Collection, CollectionCreate, CollectionUpdate } from '../types/collection'
 
 export const collectionService = {
   async list(): Promise<Collection[]> {
@@ -14,6 +14,11 @@ export const collectionService = {
 
   async create(data: CollectionCreate): Promise<Collection> {
     const response = await apiClient.post<Collection>('/api/collections', data)
+    return response.data
+  },
+
+  async update(id: string, data: CollectionUpdate): Promise<Collection> {
+    const response = await apiClient.put<Collection>(`/api/collections/${id}`, data)
     return response.data
   },
 

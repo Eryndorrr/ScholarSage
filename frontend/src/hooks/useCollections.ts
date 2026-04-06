@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { collectionService } from '../services/collectionService'
+import type { CollectionUpdate } from '../types/collection'
 
 export function useCollections() {
   const queryClient = useQueryClient()
@@ -16,6 +17,14 @@ export function useCollections() {
     },
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: CollectionUpdate }) =>
+      collectionService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collections'] })
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: collectionService.delete,
     onSuccess: () => {
@@ -27,6 +36,8 @@ export function useCollections() {
     collections,
     isLoading,
     createCollection: createMutation.mutate,
+    updateCollection: (id: string, data: CollectionUpdate) =>
+      updateMutation.mutate({ id, data }),
     deleteCollection: deleteMutation.mutate,
   }
 }
