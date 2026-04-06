@@ -132,3 +132,14 @@ frontend/src/components/KnowledgeGraph/
 ## 回退方案
 
 如果 WebGL 有问题，保留 Canvas 模式作为降级选项。
+
+## 实现状态
+
+- [x] echarts-gl 集成
+- [x] 类型定义
+- [x] LOD 策略
+- [x] 视口虚拟渲染
+- [x] WebGL 渲染配置
+- [x] WebWorker 布局计算（预留）
+- [x] useGraphRenderer Hook
+- [x] CitationGraph 组件重构
