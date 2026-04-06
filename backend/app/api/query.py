@@ -63,12 +63,14 @@ def query(
 
             logger.info(f"Session {session.id}: {len(history)} history messages, has_summary: {bool(summary)}")
 
-    # 检索相关文档
+    # 检索相关文档（支持混合检索和重排序）
     collection_name = request.collection_id if not request.search_all else "all"
     results = retriever.retrieve(
         query=request.question,
         collection_name=collection_name,
-        top_k=request.top_k
+        top_k=request.top_k,
+        use_hybrid=request.use_hybrid,
+        use_rerank=request.use_rerank
     )
 
     # 生成答案（支持多轮上下文）

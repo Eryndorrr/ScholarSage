@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 100  # 每批API调用的文本数量
     embedding_max_workers: int = 3   # 并发API调用数
 
+    # 混合检索配置
+    use_hybrid_search: bool = True  # 是否使用混合检索（向量 + BM25）
+    hybrid_alpha: float = 0.5  # 向量检索权重 (0-1)，BM25权重为 1-alpha
+
+    # 重排序配置
+    use_rerank: bool = True  # 是否使用重排序
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"  # 重排序模型
+    rerank_api_key: Optional[str] = None  # 重排序 API Key，默认使用 openai_api_key
+    rerank_base_url: Optional[str] = None  # 重排序 API 端点，默认使用 openai_base_url
+    rerank_top_k: int = 20  # 重排序候选数量
+
     class Config:
         env_file = ".env"
         case_sensitive = False

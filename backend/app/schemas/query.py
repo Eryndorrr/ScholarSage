@@ -11,6 +11,8 @@ class QueryRequest(BaseModel):
     search_all: bool = False
     top_k: int = Field(default=3, ge=1, le=10)
     include_sources: bool = True
+    use_hybrid: Optional[bool] = None  # 是否使用混合检索（默认使用配置）
+    use_rerank: Optional[bool] = None  # 是否使用重排序（默认使用配置）
 
 
 class QueryResponse(BaseModel):

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
-from app.api import collections, documents, query, sessions, papers, evaluation
+from app.api import collections, documents, query, sessions, papers, evaluation, knowledge_graph
 import os
 import logging
 import sys
@@ -48,6 +48,7 @@ app.include_router(query.router)
 app.include_router(sessions.router)
 app.include_router(papers.router)
 app.include_router(evaluation.router)
+app.include_router(knowledge_graph.router)
 logger.info("API routes registered")
 
 

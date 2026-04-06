@@ -4,6 +4,7 @@ from app.core.parsers.markdown_parser import MarkdownParser
 from app.core.parsers.word_parser import WordParser
 from app.core.rag.embeddings import EmbeddingEngine
 from app.core.rag.vector_store import VectorStore
+from app.core.rag.bm25_retriever import get_bm25_retriever
 from app.models.document import FileType
 import uuid
 import logging
@@ -17,6 +18,7 @@ class DocumentProcessor:
     def __init__(self):
         self.embedding_engine = EmbeddingEngine()
         self.vector_store = VectorStore()
+        self.bm25_retriever = get_bm25_retriever()
 
     def process_document(
         self,
@@ -120,6 +122,21 @@ class DocumentProcessor:
                 metadatas=metadatas,
                 ids=chunk_ids
             )
+
+            # 6. 索引到 BM25（用于混合检索）
+            try:
+                bm25_docs = [
+                    {
+                        "id": chunk_ids[i],
+                        "content": chunks[i],
+                        "metadata": metadatas[i]
+                    }
+                    for i in range(len(chunks))
+                ]
+                self.bm25_retriever.index_documents(collection_id, bm25_docs)
+                logger.info(f"Indexed {len(chunks)} chunks for BM25")
+            except Exception as e:
+                logger.warning(f"Failed to index for BM25: {e}")
 
             update_progress(100)
             logger.info(f"Document processed successfully: {len(chunks)} chunks")

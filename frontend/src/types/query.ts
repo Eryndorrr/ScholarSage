@@ -7,6 +7,8 @@ export interface QueryRequest {
   search_all?: boolean
   top_k?: number
   include_sources?: boolean
+  use_hybrid?: boolean  // 是否使用混合检索
+  use_rerank?: boolean  // 是否使用重排序
 }
 
 export interface QueryResponse {

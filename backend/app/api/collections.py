@@ -123,6 +123,15 @@ def delete_collection(collection_id: str, db: Session = Depends(get_db)):
         # 集合可能不存在，忽略错误
         logger.warning(f"Failed to delete vector collection: {e}")
 
+    # 删除 BM25 索引
+    try:
+        from app.core.rag.bm25_retriever import get_bm25_retriever
+        bm25_retriever = get_bm25_retriever()
+        bm25_retriever.delete_collection(collection_id)
+        logger.info(f"Deleted BM25 index for collection {collection_id}")
+    except Exception as e:
+        logger.warning(f"Failed to delete BM25 index: {e}")
+
     # 删除文档文件
     import os
     for doc in documents:

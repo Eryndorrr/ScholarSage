@@ -10,6 +10,7 @@ import { DocumentPreview } from './components/DocumentManager/DocumentPreview'
 import { PaperList } from './components/PaperManager/PaperList'
 import { PaperDetail } from './components/PaperManager/PaperDetail'
 import { EvaluationPage } from './components/Evaluation/EvaluationPage'
+import { KnowledgeGraphPage } from './components/KnowledgeGraph/KnowledgeGraphPage'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
 import type { Session, SessionMessage } from './types/session'
@@ -28,6 +29,7 @@ function App() {
   const [middlePanelTab, setMiddlePanelTab] = useState<'documents' | 'papers'>('documents')
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
   const [showEvaluationPage, setShowEvaluationPage] = useState(false)
+  const [showGraphPage, setShowGraphPage] = useState(false)
 
   // Session 状态
   const [sessions, setSessions] = useState<Session[]>([])
@@ -217,11 +219,16 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {showEvaluationPage ? (
+      {showGraphPage ? (
+        <KnowledgeGraphPage onBack={() => setShowGraphPage(false)} />
+      ) : showEvaluationPage ? (
         <EvaluationPage onBack={() => setShowEvaluationPage(false)} />
       ) : (
         <MainLayout>
-          <Header onEvaluationClick={() => setShowEvaluationPage(true)} />
+          <Header
+            onEvaluationClick={() => setShowEvaluationPage(true)}
+            onGraphClick={() => setShowGraphPage(true)}
+          />
 
           <div className="flex-1 flex overflow-hidden">
             {/* 左侧边栏：知识库 */}

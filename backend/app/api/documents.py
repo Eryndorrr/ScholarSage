@@ -169,12 +169,25 @@ def delete_document(
 
     # 删除向量数据
     from app.core.rag.vector_store import VectorStore
+    from app.core.rag.bm25_retriever import get_bm25_retriever
     try:
         vector_store = VectorStore()
         deleted_count = vector_store.delete_document(collection_id, document_id)
         logger.info(f"Deleted {deleted_count} vectors for document {document_id}")
     except Exception as e:
         logger.warning(f"Failed to delete vectors: {e}")
+
+    # 删除 BM25 索引
+    try:
+        bm25_retriever = get_bm25_retriever()
+        # 删除该文档的所有 chunks
+        # 需要找到所有相关的 chunk IDs
+        if deleted_count and deleted_count > 0:
+            # 由于 BM25 使用 chunk_id，这里需要逐个删除
+            # 暂时跳过，因为 chunk_ids 在处理时生成
+            pass
+    except Exception as e:
+        logger.warning(f"Failed to delete from BM25 index: {e}")
 
     # 删除文件
     if document.file_path and os.path.exists(document.file_path):
