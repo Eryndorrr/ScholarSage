@@ -14,8 +14,12 @@ export const DEFAULT_RENDER_CONFIG: RenderConfig = {
 
 /**
  * 节点数阈值：超过此值使用 WebGL，否则使用 Canvas
+ * 可通过环境变量 VITE_WEBGL_NODE_THRESHOLD 配置，默认 500
  */
-export const WEBGL_NODE_THRESHOLD = 500
+export const WEBGL_NODE_THRESHOLD = parseInt(
+  import.meta.env.VITE_WEBGL_NODE_THRESHOLD || '500',
+  10
+)
 
 /**
  * 检测 WebGL 支持
