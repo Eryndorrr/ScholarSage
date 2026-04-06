@@ -1,4 +1,3 @@
-import * as echarts from 'echarts'
 import 'echarts-gl'
 import type { EChartsOption } from 'echarts'
 import type { NodeRenderData, EdgeRenderData, RenderConfig } from './types'
@@ -86,7 +85,6 @@ export function prepareEdgeData(
   edges: any[],
   zoom: number = 1
 ): EdgeRenderData[] {
-  const lodLevel = getLODLevel(zoom)
   const lodConfig = getLODConfig(zoom)
 
   return edges.map((edge) => {

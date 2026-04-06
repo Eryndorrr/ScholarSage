@@ -17,11 +17,6 @@ interface LayoutNode {
   symbolSize: number
 }
 
-interface LayoutEdge {
-  source: string
-  target: string
-}
-
 /**
  * 初始化节点位置（使用圆形布局作为初始位置）
  */

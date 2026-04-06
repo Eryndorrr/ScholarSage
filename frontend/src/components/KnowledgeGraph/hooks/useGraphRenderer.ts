@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
+import type { ECharts, TooltipComponentOption } from 'echarts'
 import type { CitationGraphData, PaperNode } from '../../../types/graph'
 import type { RenderConfig, ViewportState } from '../graph/types'
 import {
@@ -14,10 +14,9 @@ import {
 import { getViewportFromChart } from '../graph/viewport'
 
 interface UseGraphRendererOptions {
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement | null>
   data: CitationGraphData | null
   showExternal: boolean
-  minCitations: number
   config?: RenderConfig
   onNodeClick?: (node: PaperNode) => void
 }
@@ -118,8 +117,8 @@ export function useGraphRenderer({
       const option = createGraphOption(nodeData, edgeData, config)
 
       // 设置 tooltip 格式化
-      if (option.tooltip && typeof option.tooltip === 'object') {
-        option.tooltip.formatter = createTooltipFormatter(displayNodes, displayEdges)
+      if (option.tooltip && !Array.isArray(option.tooltip)) {
+        (option.tooltip as TooltipComponentOption).formatter = createTooltipFormatter(displayNodes, displayEdges) as any
       }
 
       chartInstance.current.setOption(option, true)

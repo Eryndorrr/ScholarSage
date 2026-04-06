@@ -87,7 +87,7 @@ export function shouldShowLabel(
 export function getScaledNodeSize(
   baseSize: number,
   zoom: number,
-  isInternal: boolean
+  _isInternal?: boolean
 ): number {
   const level = getLODLevel(zoom)
   const config = LOD_CONFIGS[level]

@@ -31,7 +31,7 @@ export function CitationGraph({
   }, [])
 
   // 使用渲染 Hook
-  const { isLoading, error, viewport, nodeCount, edgeCount } = useGraphRenderer({
+  const { isLoading, error, viewport, nodeCount } = useGraphRenderer({
     containerRef,
     data,
     showExternal,

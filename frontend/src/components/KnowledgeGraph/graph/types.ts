@@ -93,6 +93,6 @@ export interface EdgeRenderData {
     curveness: number
     type: 'solid' | 'dashed'
   }
-  symbol: ['none', 'arrow']
+  symbol: ['none', 'arrow' | 'none']
   symbolSize: [number, number]
 }
