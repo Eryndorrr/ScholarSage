@@ -8,12 +8,18 @@ export interface Document {
   title: string
   file_type: FileType
   file_size: number
+  file_hash: string | null
   status: ProcessStatus
   progress: number
   chunk_count: number
   error_message: string | null
   has_paper: boolean  // 是否已解析为论文
   upload_time: string
+}
+
+export interface DuplicateCheckResponse {
+  is_duplicate: boolean
+  existing_document: Document | null
 }
 
 export interface Source {

@@ -21,6 +21,7 @@ class DocumentResponse(DocumentBase):
     collection_id: str
     file_type: FileType
     file_size: int
+    file_hash: Optional[str] = None
     status: ProcessStatus
     chunk_count: int
     error_message: Optional[str] = None
@@ -29,6 +30,12 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
+
+class DuplicateCheckResponse(BaseModel):
+    """重复文件检查响应"""
+    is_duplicate: bool
+    existing_document: Optional[DocumentResponse] = None
 
 
 class SourceResponse(BaseModel):

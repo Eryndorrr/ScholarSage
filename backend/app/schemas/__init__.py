@@ -6,7 +6,8 @@ from app.schemas.collection import (
 from app.schemas.document import (
     DocumentCreate,
     DocumentResponse,
-    SourceResponse
+    SourceResponse,
+    DuplicateCheckResponse
 )
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.query_history import (
@@ -44,7 +45,7 @@ from app.schemas.evaluation import (
 
 __all__ = [
     "CollectionCreate", "CollectionUpdate", "CollectionResponse",
-    "DocumentCreate", "DocumentResponse", "SourceResponse",
+    "DocumentCreate", "DocumentResponse", "SourceResponse", "DuplicateCheckResponse",
     "QueryRequest", "QueryResponse",
     "QueryHistoryCreate", "QueryHistoryResponse", "QueryHistoryListResponse",
     "PaperCreate", "PaperUpdate", "PaperResponse", "PaperListResponse", "PaperWithCitationsResponse",

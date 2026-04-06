@@ -1,4 +1,4 @@
-import type { Document, FileType } from '../types/document'
+import type { Document, FileType, DuplicateCheckResponse } from '../types/document'
 
 export interface UploadResponse {
   id: string
@@ -10,17 +10,43 @@ export interface UploadResponse {
 }
 
 export const documentService = {
-  async upload(collectionId: string, file: File): Promise<UploadResponse> {
+  async checkDuplicate(collectionId: string, file: File): Promise<DuplicateCheckResponse> {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await fetch(`/api/collections/${collectionId}/documents`, {
+    const response = await fetch(`/api/collections/${collectionId}/documents/check-duplicate`, {
       method: 'POST',
       body: formData,
     })
 
     if (!response.ok) {
       const error = await response.json()
+      throw new Error(error.detail || 'Duplicate check failed')
+    }
+
+    return response.json()
+  },
+
+  async upload(collectionId: string, file: File, skipDuplicateCheck: boolean = false): Promise<UploadResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const url = `/api/collections/${collectionId}/documents${skipDuplicateCheck ? '?skip_duplicate_check=true' : ''}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      // 处理重复文件错误
+      if (response.status === 409) {
+        const duplicateError = new Error(error.detail?.message || '检测到重复文件')
+        ;(duplicateError as any).isDuplicate = true
+        ;(duplicateError as any).existingDocument = error.detail?.existing_document
+        throw duplicateError
+      }
       throw new Error(error.detail || 'Upload failed')
     }
 

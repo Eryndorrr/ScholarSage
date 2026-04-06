@@ -3,15 +3,21 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models import Document, Collection, FileType, ProcessStatus, Paper
-from app.schemas import DocumentResponse
+from app.schemas import DocumentResponse, DuplicateCheckResponse
 from app.core.rag.document_processor import DocumentProcessor
 import os
 import uuid
+import hashlib
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
+
+
+def calculate_file_hash(content: bytes) -> str:
+    """计算文件的 SHA256 哈希值"""
+    return hashlib.sha256(content).hexdigest()
 
 
 def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType, document_title: str):
@@ -74,14 +80,61 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
         db.close()
 
 
+@router.post("/check-duplicate", response_model=DuplicateCheckResponse)
+async def check_duplicate(
+    collection_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    检查上传的文件是否重复
+
+    通过计算文件内容的 SHA256 哈希值，检查同一知识库中是否已存在相同内容的文档
+    """
+    # 验证 collection 是否存在
+    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    # 读取文件内容并计算哈希
+    content = await file.read()
+    file_hash = calculate_file_hash(content)
+
+    # 重置文件指针以便后续可能的读取
+    await file.seek(0)
+
+    # 检查是否已存在相同哈希的文档
+    existing_doc = db.query(Document).filter(
+        Document.collection_id == collection_id,
+        Document.file_hash == file_hash
+    ).first()
+
+    if existing_doc:
+        return DuplicateCheckResponse(
+            is_duplicate=True,
+            existing_document=DocumentResponse.model_validate(existing_doc)
+        )
+
+    return DuplicateCheckResponse(
+        is_duplicate=False,
+        existing_document=None
+    )
+
+
 @router.post("", response_model=DocumentResponse)
 async def upload_document(
     collection_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    skip_duplicate_check: bool = False,
     db: Session = Depends(get_db)
 ):
-    """上传文档并自动处理"""
+    """
+    上传文档并自动处理
+
+    Args:
+        skip_duplicate_check: 是否跳过重复检查（默认 False，会自动检查并拒绝重复文件）
+    """
     # 验证collection是否存在
     collection = db.query(Collection).filter(Collection.id == collection_id).first()
     if not collection:
@@ -98,13 +151,39 @@ async def upload_document(
     else:
         raise HTTPException(status_code=400, detail="不支持的文件类型")
 
+    # 读取文件内容
+    content = await file.read()
+    file_size = len(content)
+
+    # 计算文件哈希
+    file_hash = calculate_file_hash(content)
+
+    # 检查重复文件
+    if not skip_duplicate_check:
+        existing_doc = db.query(Document).filter(
+            Document.collection_id == collection_id,
+            Document.file_hash == file_hash
+        ).first()
+
+        if existing_doc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "检测到重复文件",
+                    "existing_document": {
+                        "id": existing_doc.id,
+                        "title": existing_doc.title,
+                        "upload_time": existing_doc.upload_time.isoformat() if existing_doc.upload_time else None
+                    }
+                }
+            )
+
     # 保存文件
     file_id = str(uuid.uuid4())
     file_path = f"./uploads/{file_id}_{filename}"
     os.makedirs("./uploads", exist_ok=True)
 
     with open(file_path, "wb") as buffer:
-        content = await file.read()
         buffer.write(content)
 
     # 创建文档记录
@@ -113,7 +192,8 @@ async def upload_document(
         title=filename,
         file_path=file_path,
         file_type=file_type,
-        file_size=len(content),
+        file_size=file_size,
+        file_hash=file_hash,
         status=ProcessStatus.PENDING
     )
     db.add(document)

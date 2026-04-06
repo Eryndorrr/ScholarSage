@@ -32,6 +32,7 @@ class Document(Base):
     file_path = Column(String(500), nullable=False)
     file_type = Column(SQLEnum(FileType), nullable=False)
     file_size = Column(Integer, default=0)
+    file_hash = Column(String(64), nullable=True, index=True)  # SHA256 哈希，用于去重
     status = Column(SQLEnum(ProcessStatus), default=ProcessStatus.PENDING)
     progress = Column(Integer, default=0)  # 处理进度 0-100
     chunk_count = Column(Integer, default=0)
