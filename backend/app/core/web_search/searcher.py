@@ -20,10 +20,12 @@ class WebSearcher:
     def __init__(
         self,
         provider: Optional[str] = None,
-        tavily_api_key: Optional[str] = None
+        tavily_api_key: Optional[str] = None,
+        proxy: Optional[str] = None
     ):
         self.provider = provider or settings.web_search_provider
         self.tavily_api_key = tavily_api_key or settings.tavily_api_key
+        self.proxy = proxy or settings.web_search_proxy
         self._searcher: Optional[BaseSearcher] = None
 
     def _get_searcher(self) -> BaseSearcher:
@@ -34,13 +36,13 @@ class WebSearcher:
         if self.provider == "tavily":
             if not self.tavily_api_key:
                 logger.warning("Tavily API Key 未配置，回退到 DuckDuckGo")
-                self._searcher = DuckDuckGoSearcher()
+                self._searcher = DuckDuckGoSearcher(proxy=self.proxy)
                 self.provider = "duckduckgo"
             else:
                 self._searcher = TavilySearcher(api_key=self.tavily_api_key)
         else:
             # 默认使用 DuckDuckGo
-            self._searcher = DuckDuckGoSearcher()
+            self._searcher = DuckDuckGoSearcher(proxy=self.proxy)
 
         return self._searcher
 

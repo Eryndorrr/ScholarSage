@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     web_search_provider: str = "duckduckgo"  # 搜索引擎: duckduckgo, tavily
     tavily_api_key: Optional[str] = None  # Tavily API Key
     web_search_max_results: int = 5  # 每次搜索返回的最大结果数
+    web_search_proxy: Optional[str] = None  # 代理设置，如 "http://127.0.0.1:7890"
 
     class Config:
         env_file = ".env"
