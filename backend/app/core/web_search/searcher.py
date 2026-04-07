@@ -2,6 +2,7 @@
 统一网络搜索器
 
 根据配置选择搜索引擎
+支持：DuckDuckGo（免费）、Tavily、Bocha（博查）
 """
 
 import logging
@@ -10,6 +11,7 @@ from app.config import settings
 from app.core.web_search.base import BaseSearcher, WebSearchResponse
 from app.core.web_search.duckduckgo import DuckDuckGoSearcher
 from app.core.web_search.tavily import TavilySearcher
+from app.core.web_search.bocha import BochaSearcher
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +23,12 @@ class WebSearcher:
         self,
         provider: Optional[str] = None,
         tavily_api_key: Optional[str] = None,
+        bocha_api_key: Optional[str] = None,
         proxy: Optional[str] = None
     ):
         self.provider = provider or settings.web_search_provider
         self.tavily_api_key = tavily_api_key or settings.tavily_api_key
+        self.bocha_api_key = bocha_api_key or settings.bocha_api_key
         self.proxy = proxy or settings.web_search_proxy
         self._searcher: Optional[BaseSearcher] = None
 
@@ -40,6 +44,13 @@ class WebSearcher:
                 self.provider = "duckduckgo"
             else:
                 self._searcher = TavilySearcher(api_key=self.tavily_api_key)
+        elif self.provider == "bocha":
+            if not self.bocha_api_key:
+                logger.warning("Bocha API Key 未配置，回退到 DuckDuckGo")
+                self._searcher = DuckDuckGoSearcher(proxy=self.proxy)
+                self.provider = "duckduckgo"
+            else:
+                self._searcher = BochaSearcher(api_key=self.bocha_api_key)
         else:
             # 默认使用 DuckDuckGo
             self._searcher = DuckDuckGoSearcher(proxy=self.proxy)

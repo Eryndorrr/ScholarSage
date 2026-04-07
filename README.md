@@ -181,9 +181,10 @@ RERANK_TOP_K=20
 
 # ========== 联网检索 ==========
 WEB_SEARCH_ENABLED=true
-WEB_SEARCH_PROVIDER=duckduckgo  # 或 tavily
+WEB_SEARCH_PROVIDER=duckduckgo  # 可选: duckduckgo, tavily, bocha
 WEB_SEARCH_MAX_RESULTS=5
 # TAVILY_API_KEY=  # Tavily 需要 API Key
+# BOCHA_API_KEY=  # Bocha 需要 API Key
 # WEB_SEARCH_PROXY=http://127.0.0.1:7890  # 代理设置
 
 # ========== RAGAS 评估 ==========
@@ -213,7 +214,10 @@ VITE_API_URL=http://localhost:8000
 
 - 🔍 同时搜索知识库和网络
 - 📝 网络结果会作为补充上下文
-- 🌐 支持 DuckDuckGo（免费）和 Tavily（需 API Key）
+- 🌐 支持多种搜索引擎：
+  - **DuckDuckGo**（免费，无需 API Key）
+  - **Tavily**（需 API Key，专为 AI 设计）
+  - **Bocha 博查**（国内可用，需 API Key）
 
 ### 知识图谱
 

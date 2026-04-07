@@ -47,8 +47,9 @@ class Settings(BaseSettings):
 
     # 联网检索配置
     web_search_enabled: bool = False  # 全局开关，是否允许联网检索
-    web_search_provider: str = "duckduckgo"  # 搜索引擎: duckduckgo, tavily
+    web_search_provider: str = "duckduckgo"  # 搜索引擎: duckduckgo, tavily, bocha
     tavily_api_key: Optional[str] = None  # Tavily API Key
+    bocha_api_key: Optional[str] = None  # Bocha API Key
     web_search_max_results: int = 5  # 每次搜索返回的最大结果数
     web_search_proxy: Optional[str] = None  # 代理设置，如 "http://127.0.0.1:7890"
 
