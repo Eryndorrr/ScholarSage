@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Generator as TypeGenerator
 from openai import OpenAI, APIError
 from app.config import settings
 import logging
@@ -92,6 +92,83 @@ class Generator:
         except APIError as e:
             logger.error(f"Failed to generate answer: {e}")
             raise GeneratorError(f"Failed to generate answer: {e}")
+
+    def generate_answer_stream(
+        self,
+        question: str,
+        contexts: List[str],
+        history: Optional[List[Dict[str, str]]] = None,
+        summary: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7
+    ) -> TypeGenerator[str, None, None]:
+        """
+        流式生成答案（支持中断）
+
+        Args:
+            question: 当前问题
+            contexts: 检索到的相关文档
+            history: 历史对话
+            summary: 之前的对话摘要
+            max_tokens: 最大生成token数
+            temperature: 温度参数
+
+        Yields:
+            str: 生成的文本片段
+        """
+        # 构建上下文
+        context_text = "\n\n".join([f"[{i+1}] {ctx}" for i, ctx in enumerate(contexts)])
+
+        # 构建系统提示
+        system_content = "你是一个专业的问答助手，善于基于提供的参考资料给出准确、有引用的答案。请在答案中标注引用来源，格式为[1]、[2]等。"
+
+        if summary:
+            system_content += f"\n\n以下是之前对话的摘要，请参考以保持对话连贯性：\n{summary}"
+
+        # 构建消息列表
+        messages = [{"role": "system", "content": system_content}]
+
+        # 添加历史对话
+        if history:
+            recent_history = history[-12:] if len(history) > 12 else history
+            for msg in recent_history:
+                content = msg["content"]
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                messages.append({
+                    "role": msg["role"],
+                    "content": content
+                })
+
+        # 添加当前问题和上下文
+        user_prompt = f"""基于以下参考内容回答问题。
+
+参考内容：
+{context_text}
+
+问题：{question}
+
+答案："""
+
+        messages.append({"role": "user", "content": user_prompt})
+
+        try:
+            # 调用LLM流式API
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True
+            )
+
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+        except APIError as e:
+            logger.error(f"Failed to generate answer stream: {e}")
+            raise GeneratorError(f"Failed to generate answer stream: {e}")
 
     def generate_session_title(self, first_question: str) -> str:
         """

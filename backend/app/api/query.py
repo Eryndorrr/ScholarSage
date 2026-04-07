@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import QueryRequest, QueryResponse, WebSearchSource
@@ -13,6 +14,7 @@ import time
 import json
 import logging
 import asyncio
+from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,200 @@ def get_generator() -> Generator:
 def get_dialog_manager() -> DialogManager:
     """Get DialogManager instance (singleton)"""
     return DialogManager()
+
+
+async def stream_response(
+    answer_generator,
+    sources,
+    web_search_results,
+    confidence,
+    response_time,
+    db: Session,
+    request,
+    session
+) -> AsyncGenerator[str, None]:
+    """
+    流式生成响应，支持中断
+
+    SSE 格式：
+    data: {"type": "content", "text": "..."}
+    data: {"type": "sources", "data": [...]}
+    data: {"type": "done", "confidence": 0.8, "response_time": 1.5}
+    """
+    full_answer = ""
+
+    try:
+        async for chunk in answer_generator:
+            full_answer += chunk
+            yield f"data: {json.dumps({'type': 'content', 'text': chunk}, ensure_ascii=False)}\n\n"
+
+        # 发送来源信息
+        yield f"data: {json.dumps({'type': 'sources', 'data': [s.model_dump() for s in sources]}, ensure_ascii=False)}\n\n"
+
+        # 发送网络搜索结果
+        if web_search_results:
+            yield f"data: {json.dumps({'type': 'web_results', 'data': [r.model_dump() for r in web_search_results]}, ensure_ascii=False)}\n\n"
+
+        # 发送完成信号
+        yield f"data: {json.dumps({'type': 'done', 'confidence': confidence, 'response_time': response_time}, ensure_ascii=False)}\n\n"
+
+        # 保存到会话
+        if request.session_id and session:
+            # 保存用户消息
+            user_msg = SessionMessage(
+                session_id=session.id,
+                role="user",
+                content=request.question
+            )
+            db.add(user_msg)
+
+            # 保存助手消息
+            assistant_msg = SessionMessage(
+                session_id=session.id,
+                role="assistant",
+                content=full_answer,
+                sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False)
+            )
+            db.add(assistant_msg)
+
+            # 更新会话统计
+            session.message_count += 2
+            db.commit()
+
+    except asyncio.CancelledError:
+        logger.info("Stream cancelled by client")
+        yield f"data: {json.dumps({'type': 'cancelled'}, ensure_ascii=False)}\n\n"
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+
+
+@router.post("/stream")
+async def query_stream(
+    request: QueryRequest,
+    db: Session = Depends(get_db),
+    retriever: Retriever = Depends(get_retriever),
+    generator: Generator = Depends(get_generator),
+    dialog_manager: DialogManager = Depends(get_dialog_manager)
+):
+    """流式问答（支持中断）"""
+    start_time = time.time()
+
+    # 获取或创建会话
+    session = None
+    history = []
+    summary = None
+
+    if request.session_id:
+        session = db.query(Session).filter(Session.id == request.session_id).first()
+        if session:
+            messages = db.query(SessionMessage).filter(
+                SessionMessage.session_id == session.id
+            ).order_by(SessionMessage.created_at).all()
+            history = [{"role": m.role, "content": m.content} for m in messages]
+            summary = session.summary
+
+    # 检索相关文档
+    collection_name = request.collection_id if not request.search_all else "all"
+    results = retriever.retrieve(
+        query=request.question,
+        collection_name=collection_name,
+        top_k=request.top_k,
+        use_hybrid=request.use_hybrid,
+        use_rerank=request.use_rerank
+    )
+
+    contexts = [r['content'] for r in results]
+
+    # 联网检索
+    web_search_results = []
+    web_context = ""
+
+    should_web_search = request.web_search_enabled
+    if not should_web_search and session and session.web_search_enabled:
+        should_web_search = True
+
+    if should_web_search and settings.web_search_enabled:
+        try:
+            web_searcher = get_web_searcher()
+            if web_searcher.is_available():
+                search_response = await web_searcher.search(request.question)
+                if search_response.success:
+                    web_context = web_searcher.format_results_for_context(search_response)
+                    web_search_results = [
+                        WebSearchSource(
+                            title=r.title,
+                            url=r.url,
+                            snippet=r.snippet,
+                            source=r.source
+                        )
+                        for r in search_response.results
+                    ]
+        except Exception as e:
+            logger.error(f"Web search error: {e}")
+
+    full_context = contexts
+    if web_context:
+        full_context = contexts + [web_context]
+
+    # 构建来源响应
+    from app.schemas.document import SourceResponse
+    sources = []
+    confidence_sum = 0.0
+    for r in results:
+        distance = r.get('distance')
+        if distance is not None and 0 <= distance <= 1:
+            relevance_score = 1 - distance
+            confidence_sum += relevance_score
+        else:
+            relevance_score = 0.0
+        sources.append(SourceResponse(
+            document_id=r['metadata'].get('document_id', ''),
+            title=r['metadata'].get('title', '未知文档'),
+            page=r['metadata'].get('page', 0),
+            snippet=r['content'][:200],
+            relevance_score=relevance_score,
+            collection_name=r['metadata'].get('collection_name', '')
+        ))
+
+    confidence = confidence_sum / len(results) if results else 0.0
+
+    # 创建流式生成器
+    async def answer_stream():
+        """异步流式生成答案"""
+        try:
+            for chunk in generator.generate_answer_stream(
+                question=request.question,
+                contexts=full_context,
+                history=history,
+                summary=summary
+            ):
+                yield chunk
+                await asyncio.sleep(0)  # 允许中断
+        except Exception as e:
+            logger.error(f"Stream generation error: {e}")
+            raise
+
+    response_time = time.time() - start_time
+
+    return StreamingResponse(
+        stream_response(
+            answer_stream(),
+            sources,
+            web_search_results,
+            confidence,
+            response_time,
+            db,
+            request,
+            session
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.post("", response_model=QueryResponse)

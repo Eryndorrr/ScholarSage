@@ -1,5 +1,7 @@
 import type { Source } from './document'
 
+export type { Source } from './document'
+
 export interface WebSearchResult {
   title: string
   url: string

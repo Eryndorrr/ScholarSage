@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Globe, GlobeOff, Send } from 'lucide-react'
+import { Globe, GlobeOff, Send, Square } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { SourceCard } from './SourceCard'
 import { useQuery } from '../../hooks/useQuery'
@@ -19,10 +19,12 @@ interface ChatWindowProps {
 }
 
 interface Message {
+  id: string
   type: 'user' | 'ai'
   content: string
   sources?: Source[]
   webSearchResults?: WebSearchResult[]
+  isStreaming?: boolean
 }
 
 export function ChatWindow({
@@ -38,7 +40,7 @@ export function ChatWindow({
   const [messages, setMessages] = useState<Message[]>([])
   const [previewSource, setPreviewSource] = useState<Source | null>(null)
   const [inputValue, setInputValue] = useState('')
-  const { query, isLoading } = useQuery()
+  const { queryStream, abort, isLoading } = useQuery()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isFirstQuery = useRef(true)
 
@@ -47,6 +49,7 @@ export function ChatWindow({
     const convertedMessages: Message[] = []
     for (const msg of sessionMessages) {
       convertedMessages.push({
+        id: `msg-${Date.now()}-${Math.random()}`,
         type: msg.role as 'user' | 'ai',
         content: msg.content,
         sources: msg.sources ? JSON.parse(msg.sources) : undefined
@@ -76,9 +79,18 @@ export function ChatWindow({
   }, [collectionId, sessionId, webSearchEnabled])
 
   const handleQuery = (question: string) => {
-    setMessages((prev) => [...prev, { type: 'user', content: question }])
+    // 添加用户消息
+    const userMsgId = `user-${Date.now()}`
+    const aiMsgId = `ai-${Date.now()}`
 
-    query(
+    setMessages((prev) => [
+      ...prev,
+      { id: userMsgId, type: 'user', content: question },
+      { id: aiMsgId, type: 'ai', content: '', isStreaming: true }
+    ])
+
+    // 使用流式查询
+    queryStream(
       {
         question,
         collection_id: collectionId || undefined,
@@ -86,16 +98,43 @@ export function ChatWindow({
         web_search_enabled: webSearchEnabled
       },
       {
-        onSuccess: (response) => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              type: 'ai',
-              content: response.answer,
-              sources: response.sources,
-              webSearchResults: response.web_search_results,
-            },
-          ])
+        onContent: (text) => {
+          // 追加内容到 AI 消息
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, content: msg.content + text }
+                : msg
+            )
+          )
+        },
+        onSources: (sources) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, sources }
+                : msg
+            )
+          )
+        },
+        onWebResults: (webSearchResults) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, webSearchResults }
+                : msg
+            )
+          )
+        },
+        onDone: () => {
+          // 标记流式结束
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, isStreaming: false }
+                : msg
+            )
+          )
 
           // 第一次提问时更新标题
           if (isFirstQuery.current && onUpdateTitle) {
@@ -106,7 +145,27 @@ export function ChatWindow({
 
           onQueryComplete()
         },
+        onError: (error) => {
+          console.error('Query error:', error)
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, content: `抱歉，发生了错误：${error}`, isStreaming: false }
+                : msg
+            )
+          )
+        }
       }
+    )
+  }
+
+  const handleStop = () => {
+    abort()
+    // 更新当前正在流式输出的消息状态
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.isStreaming ? { ...msg, isStreaming: false } : msg
+      )
     )
   }
 
@@ -156,9 +215,22 @@ export function ChatWindow({
           </div>
         ) : (
           <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((msg, idx) => (
-              <div key={idx}>
-                <MessageBubble type={msg.type}>{msg.content}</MessageBubble>
+            {messages.map((msg) => (
+              <div key={msg.id}>
+                <MessageBubble type={msg.type}>
+                  {msg.content || (msg.isStreaming && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span className="text-gray-500">
+                        {webSearchEnabled ? '搜索中...' : '思考中...'}
+                      </span>
+                    </div>
+                  ))}
+                </MessageBubble>
 
                 {/* 网络搜索结果 */}
                 {msg.webSearchResults && msg.webSearchResults.length > 0 && (
@@ -215,21 +287,6 @@ export function ChatWindow({
               </div>
             ))}
 
-            {isLoading && (
-              <MessageBubble type="ai">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                  <span className="text-gray-500">
-                    {webSearchEnabled ? '搜索中...' : '思考中...'}
-                  </span>
-                </div>
-              </MessageBubble>
-            )}
-
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -275,12 +332,18 @@ export function ChatWindow({
                 disabled={isLoading || !collectionId}
               />
               <button
-                type="submit"
-                disabled={isLoading || !inputValue.trim() || !collectionId}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                type={isLoading ? 'button' : 'submit'}
+                onClick={isLoading ? handleStop : undefined}
+                disabled={!isLoading && (!inputValue.trim() || !collectionId)}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                  isLoading
+                    ? 'text-white bg-red-500 hover:bg-red-600'
+                    : 'text-white bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed'
+                }`}
+                title={isLoading ? '停止生成' : '发送'}
               >
                 {isLoading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <Square className="w-4 h-4" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
