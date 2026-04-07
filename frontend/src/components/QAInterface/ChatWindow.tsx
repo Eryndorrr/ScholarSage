@@ -1,27 +1,41 @@
 import { useState, useEffect, useRef } from 'react'
+import { Globe, GlobeOff } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { QueryInput } from './QueryInput'
 import { SourceCard } from './SourceCard'
 import { useQuery } from '../../hooks/useQuery'
 import type { Source } from '../../types/document'
 import type { SessionMessage } from '../../types/session'
+import type { WebSearchResult } from '../../types/query'
 
 interface ChatWindowProps {
   collectionId: string | null
   sessionId: string | null
   sessionMessages: SessionMessage[]
   sessionTitle: string | null
+  webSearchEnabled?: boolean
   onQueryComplete: () => void
   onUpdateTitle?: (title: string) => void
+  onToggleWebSearch?: (enabled: boolean) => void
 }
 
 interface Message {
   type: 'user' | 'ai'
   content: string
   sources?: Source[]
+  webSearchResults?: WebSearchResult[]
 }
 
-export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTitle, onQueryComplete, onUpdateTitle }: ChatWindowProps) {
+export function ChatWindow({
+  collectionId,
+  sessionId,
+  sessionMessages,
+  sessionTitle,
+  webSearchEnabled = false,
+  onQueryComplete,
+  onUpdateTitle,
+  onToggleWebSearch
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [previewSource, setPreviewSource] = useState<Source | null>(null)
   const { query, isLoading } = useQuery()
@@ -59,7 +73,7 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
     return () => {
       window.removeEventListener('requery', handleRequery as EventListener)
     }
-  }, [collectionId, sessionId])
+  }, [collectionId, sessionId, webSearchEnabled])
 
   const handleQuery = (question: string) => {
     setMessages((prev) => [...prev, { type: 'user', content: question }])
@@ -68,7 +82,8 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
       {
         question,
         collection_id: collectionId || undefined,
-        session_id: sessionId || undefined
+        session_id: sessionId || undefined,
+        web_search_enabled: webSearchEnabled
       },
       {
         onSuccess: (response) => {
@@ -78,6 +93,7 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
               type: 'ai',
               content: response.answer,
               sources: response.sources,
+              webSearchResults: response.web_search_results,
             },
           ])
 
@@ -100,6 +116,40 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
 
   return (
     <div className="flex-1 flex flex-col h-full">
+      {/* 顶部工具栏 */}
+      {(sessionTitle || onToggleWebSearch) && (
+        <div className="border-b px-4 py-2 bg-white flex items-center justify-between">
+          <div className="text-sm text-gray-500 truncate">
+            {sessionTitle || '新对话'}
+          </div>
+
+          {/* 联网检索开关 */}
+          {onToggleWebSearch && (
+            <button
+              onClick={() => onToggleWebSearch(!webSearchEnabled)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                webSearchEnabled
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={webSearchEnabled ? '联网检索已开启' : '联网检索已关闭'}
+            >
+              {webSearchEnabled ? (
+                <>
+                  <Globe className="w-3.5 h-3.5" />
+                  联网检索
+                </>
+              ) : (
+                <>
+                  <GlobeOff className="w-3.5 h-3.5" />
+                  仅知识库
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 消息区域 */}
       <div className="flex-1 overflow-y-auto p-6">
         {messages.length === 0 ? (
@@ -112,6 +162,11 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
               </div>
               <p className="text-lg font-medium text-gray-500 mb-1">开始对话</p>
               <p className="text-sm">基于已上传的文档进行智能问答</p>
+              {webSearchEnabled && (
+                <p className="text-xs text-blue-500 mt-2">
+                  🔍 联网检索已开启，将同时搜索网络资源
+                </p>
+              )}
               {sessionTitle && (
                 <p className="text-xs text-gray-400 mt-2">当前对话：{sessionTitle}</p>
               )}
@@ -122,6 +177,43 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
             {messages.map((msg, idx) => (
               <div key={idx}>
                 <MessageBubble type={msg.type}>{msg.content}</MessageBubble>
+
+                {/* 网络搜索结果 */}
+                {msg.webSearchResults && msg.webSearchResults.length > 0 && (
+                  <div className="mt-3 mb-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Globe className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs font-medium text-blue-600">网络搜索结果</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {msg.webSearchResults.map((result, sIdx) => (
+                        <a
+                          key={sIdx}
+                          href={result.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block p-2 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm transition-colors"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="text-blue-600 font-medium flex-1 truncate">
+                              {result.title}
+                            </span>
+                            {result.source && (
+                              <span className="text-xs text-gray-400 flex-shrink-0">
+                                {result.source}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-gray-600 text-xs mt-0.5 line-clamp-2">
+                            {result.snippet}
+                          </p>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 本地知识库来源 */}
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-3 mb-4">
                     <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
@@ -149,7 +241,9 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span className="text-gray-500">思考中...</span>
+                  <span className="text-gray-500">
+                    {webSearchEnabled ? '搜索中...' : '思考中...'}
+                  </span>
                 </div>
               </MessageBubble>
             )}
@@ -163,6 +257,11 @@ export function ChatWindow({ collectionId, sessionId, sessionMessages, sessionTi
       <div className="border-t p-4 bg-gray-50">
         <div className="max-w-3xl mx-auto">
           <QueryInput onSubmit={handleQuery} disabled={isLoading || !collectionId} />
+          {webSearchEnabled && (
+            <div className="text-xs text-center text-blue-500 mt-2">
+              🔍 联网检索已开启 · 回答将参考网络资源
+            </div>
+          )}
         </div>
       </div>
 

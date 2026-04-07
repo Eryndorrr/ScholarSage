@@ -15,6 +15,7 @@ class Session(Base):
     summary = Column(Text, nullable=True)  # 对话摘要（压缩后的历史）
     message_count = Column(Integer, default=0)  # 消息数量
     is_active = Column(Boolean, default=True)  # 是否活跃
+    web_search_enabled = Column(Boolean, default=False)  # 是否开启联网检索
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

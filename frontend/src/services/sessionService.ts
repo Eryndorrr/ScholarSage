@@ -2,10 +2,11 @@ import { apiClient } from './api'
 import type { Session, SessionListResponse } from '../types/session'
 
 export const sessionService = {
-  async create(collectionId: string, title?: string): Promise<Session> {
+  async create(collectionId: string, title?: string, webSearchEnabled?: boolean): Promise<Session> {
     const response = await apiClient.post<Session>('/api/sessions', {
       collection_id: collectionId,
-      title
+      title,
+      web_search_enabled: webSearchEnabled
     })
     return response.data
   },
@@ -22,8 +23,8 @@ export const sessionService = {
     return response.data
   },
 
-  async update(sessionId: string, title: string): Promise<Session> {
-    const response = await apiClient.put<Session>(`/api/sessions/${sessionId}`, { title })
+  async update(sessionId: string, data: { title?: string; web_search_enabled?: boolean }): Promise<Session> {
+    const response = await apiClient.put<Session>(`/api/sessions/${sessionId}`, data)
     return response.data
   },
 

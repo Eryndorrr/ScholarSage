@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import QueryRequest, QueryResponse
+from app.schemas import QueryRequest, QueryResponse, WebSearchSource
 from app.models import QueryHistory, Collection, Session, SessionMessage
 from app.core.rag.retriever import Retriever
 from app.core.rag.generator import Generator
 from app.core.rag.dialog_manager import DialogManager
+from app.core.web_search import get_web_searcher
+from app.config import settings
 from functools import lru_cache
 import time
 import json
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ def query(
     generator: Generator = Depends(get_generator),
     dialog_manager: DialogManager = Depends(get_dialog_manager)
 ):
-    """智能问答（支持多轮对话）"""
+    """智能问答（支持多轮对话和联网检索）"""
     start_time = time.time()
 
     # 获取或创建会话
@@ -73,11 +76,52 @@ def query(
         use_rerank=request.use_rerank
     )
 
-    # 生成答案（支持多轮上下文）
+    # 准备上下文
     contexts = [r['content'] for r in results]
+
+    # 联网检索
+    web_search_results = []
+    web_context = ""
+
+    # 判断是否启用联网检索（请求参数 或 会话设置）
+    should_web_search = request.web_search_enabled
+    if not should_web_search and session and session.web_search_enabled:
+        should_web_search = True
+
+    if should_web_search and settings.web_search_enabled:
+        try:
+            web_searcher = get_web_searcher()
+            if web_searcher.is_available():
+                # 执行异步搜索
+                search_response = asyncio.run(web_searcher.search(request.question))
+
+                if search_response.success:
+                    web_context = web_searcher.format_results_for_context(search_response)
+                    web_search_results = [
+                        WebSearchSource(
+                            title=r.title,
+                            url=r.url,
+                            snippet=r.snippet,
+                            source=r.source
+                        )
+                        for r in search_response.results
+                    ]
+                    logger.info(f"Web search returned {len(web_search_results)} results")
+                else:
+                    logger.warning(f"Web search failed: {search_response.error}")
+        except Exception as e:
+            logger.error(f"Web search error: {e}")
+
+    # 合并上下文
+    full_context = contexts
+    if web_context:
+        # 将网络搜索结果添加到上下文
+        full_context = contexts + [web_context]
+
+    # 生成答案（支持多轮上下文）
     answer = generator.generate_answer(
         question=request.question,
-        contexts=contexts,
+        contexts=full_context,
         history=history,
         summary=summary
     )
@@ -164,7 +208,8 @@ def query(
         answer=answer,
         sources=sources,
         confidence=confidence,
-        response_time=response_time
+        response_time=response_time,
+        web_search_results=web_search_results
     )
 
 

@@ -9,7 +9,7 @@ from app.schemas.document import (
     SourceResponse,
     DuplicateCheckResponse
 )
-from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.query import QueryRequest, QueryResponse, WebSearchSource
 from app.schemas.query_history import (
     QueryHistoryCreate,
     QueryHistoryResponse,
@@ -46,7 +46,7 @@ from app.schemas.evaluation import (
 __all__ = [
     "CollectionCreate", "CollectionUpdate", "CollectionResponse",
     "DocumentCreate", "DocumentResponse", "SourceResponse", "DuplicateCheckResponse",
-    "QueryRequest", "QueryResponse",
+    "QueryRequest", "QueryResponse", "WebSearchSource",
     "QueryHistoryCreate", "QueryHistoryResponse", "QueryHistoryListResponse",
     "PaperCreate", "PaperUpdate", "PaperResponse", "PaperListResponse", "PaperWithCitationsResponse",
     "CitationCreate", "CitationResponse", "CitationListResponse",

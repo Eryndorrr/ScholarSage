@@ -32,7 +32,8 @@ def create_session(
 
     new_session = Session(
         collection_id=session_data.collection_id,
-        title=session_data.title or "新对话"
+        title=session_data.title or "新对话",
+        web_search_enabled=session_data.web_search_enabled
     )
     db.add(new_session)
     db.commit()
@@ -77,6 +78,7 @@ def get_session(
         summary=session.summary,
         message_count=session.message_count,
         is_active=session.is_active,
+        web_search_enabled=session.web_search_enabled,
         created_at=session.created_at,
         updated_at=session.updated_at,
         messages=[
@@ -104,8 +106,10 @@ def update_session(
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
 
-    if update_data.title:
+    if update_data.title is not None:
         session.title = update_data.title
+    if update_data.web_search_enabled is not None:
+        session.web_search_enabled = update_data.web_search_enabled
 
     db.commit()
     db.refresh(session)

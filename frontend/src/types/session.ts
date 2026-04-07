@@ -14,6 +14,7 @@ export interface Session {
   summary: string | null
   message_count: number
   is_active: boolean
+  web_search_enabled: boolean
   created_at: string
   updated_at: string
   messages?: SessionMessage[]

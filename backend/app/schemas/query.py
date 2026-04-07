@@ -3,6 +3,14 @@ from typing import List, Optional
 from app.schemas.document import SourceResponse
 
 
+class WebSearchSource(BaseModel):
+    """网络搜索结果"""
+    title: str
+    url: str
+    snippet: str
+    source: str = ""
+
+
 class QueryRequest(BaseModel):
     """查询请求"""
     question: str = Field(..., min_length=1, max_length=1000)
@@ -13,6 +21,7 @@ class QueryRequest(BaseModel):
     include_sources: bool = True
     use_hybrid: Optional[bool] = None  # 是否使用混合检索（默认使用配置）
     use_rerank: Optional[bool] = None  # 是否使用重排序（默认使用配置）
+    web_search_enabled: bool = False  # 是否启用联网检索
 
 
 class QueryResponse(BaseModel):
@@ -21,3 +30,4 @@ class QueryResponse(BaseModel):
     sources: List[SourceResponse]
     confidence: float
     response_time: float
+    web_search_results: List[WebSearchSource] = []  # 网络搜索结果

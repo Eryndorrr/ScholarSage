@@ -122,13 +122,27 @@ function App() {
   const updateSessionTitle = async (title: string) => {
     if (!currentSession) return
     try {
-      await sessionService.update(currentSession.id, title)
+      await sessionService.update(currentSession.id, { title })
       setSessions(prev => prev.map(s =>
         s.id === currentSession.id ? { ...s, title } : s
       ))
       setCurrentSession(prev => prev ? { ...prev, title } : null)
     } catch (error) {
       console.error('Failed to update title:', error)
+    }
+  }
+
+  // 切换联网检索
+  const toggleWebSearch = async (enabled: boolean) => {
+    if (!currentSession) return
+    try {
+      await sessionService.update(currentSession.id, { web_search_enabled: enabled })
+      setSessions(prev => prev.map(s =>
+        s.id === currentSession.id ? { ...s, web_search_enabled: enabled } : s
+      ))
+      setCurrentSession(prev => prev ? { ...prev, web_search_enabled: enabled } : null)
+    } catch (error) {
+      console.error('Failed to toggle web search:', error)
     }
   }
 
@@ -351,8 +365,10 @@ function App() {
                     sessionId={currentSession?.id || null}
                     sessionMessages={sessionMessages}
                     sessionTitle={currentSession?.title || null}
+                    webSearchEnabled={currentSession?.web_search_enabled || false}
                     onQueryComplete={handleQueryComplete}
                     onUpdateTitle={updateSessionTitle}
+                    onToggleWebSearch={toggleWebSearch}
                   />
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-gray-400">

@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     rerank_base_url: Optional[str] = None  # 重排序 API 端点，默认使用 openai_base_url
     rerank_top_k: int = 20  # 重排序候选数量
 
+    # 联网检索配置
+    web_search_enabled: bool = False  # 全局开关，是否允许联网检索
+    web_search_provider: str = "duckduckgo"  # 搜索引擎: duckduckgo, tavily
+    tavily_api_key: Optional[str] = None  # Tavily API Key
+    web_search_max_results: int = 5  # 每次搜索返回的最大结果数
+
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -21,10 +21,12 @@ class SessionMessageResponse(SessionMessageBase):
 class SessionCreate(BaseModel):
     collection_id: str
     title: Optional[str] = None
+    web_search_enabled: bool = False
 
 
 class SessionUpdate(BaseModel):
     title: Optional[str] = None
+    web_search_enabled: Optional[bool] = None
 
 
 class SessionResponse(BaseModel):
@@ -34,6 +36,7 @@ class SessionResponse(BaseModel):
     summary: Optional[str]
     message_count: int
     is_active: bool
+    web_search_enabled: bool = False
     created_at: datetime
     updated_at: datetime
 
