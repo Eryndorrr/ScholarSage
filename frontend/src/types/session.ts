@@ -4,6 +4,7 @@ export interface SessionMessage {
   role: 'user' | 'assistant'
   content: string
   sources?: string
+  web_search_results?: string  // JSON 格式的网络搜索结果
   created_at: string
 }
 

@@ -1,6 +1,8 @@
 import { apiClient } from './api'
 import type { QueryRequest, QueryResponse, Source, WebSearchResult } from '../types/query'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 export interface StreamCallbacks {
   onContent: (text: string) => void
   onSources?: (sources: Source[]) => void
@@ -27,7 +29,7 @@ export const queryService = {
     const controller = new AbortController()
 
     // 使用 fetch 而不是 axios，因为 axios 对 SSE 支持不好
-    fetch('/api/query/stream', {
+    fetch(`${API_BASE_URL}/api/query/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

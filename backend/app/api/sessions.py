@@ -88,6 +88,7 @@ def get_session(
                 role=msg.role,
                 content=msg.content,
                 sources=msg.sources,
+                web_search_results=msg.web_search_results,
                 created_at=msg.created_at
             )
             for msg in session.messages

@@ -52,7 +52,8 @@ export function ChatWindow({
         id: `msg-${Date.now()}-${Math.random()}`,
         type: msg.role as 'user' | 'ai',
         content: msg.content,
-        sources: msg.sources ? JSON.parse(msg.sources) : undefined
+        sources: msg.sources ? JSON.parse(msg.sources) : undefined,
+        webSearchResults: msg.web_search_results ? JSON.parse(msg.web_search_results) : undefined
       })
     }
     setMessages(convertedMessages)
@@ -232,9 +233,27 @@ export function ChatWindow({
                   ))}
                 </MessageBubble>
 
+                {/* 本地知识库来源 */}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-3 mb-2">
+                    <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
+                      参考来源
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {msg.sources.map((source, sIdx) => (
+                        <SourceCard
+                          key={sIdx}
+                          source={source}
+                          onPreview={collectionId ? handleSourcePreview : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* 网络搜索结果 */}
                 {msg.webSearchResults && msg.webSearchResults.length > 0 && (
-                  <div className="mt-3 mb-2">
+                  <div className="mt-3 mb-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Globe className="w-3.5 h-3.5 text-blue-500" />
                       <span className="text-xs font-medium text-blue-600">网络搜索结果</span>
@@ -262,24 +281,6 @@ export function ChatWindow({
                             {result.snippet}
                           </p>
                         </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 本地知识库来源 */}
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-3 mb-4">
-                    <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
-                      参考来源
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {msg.sources.map((source, sIdx) => (
-                        <SourceCard
-                          key={sIdx}
-                          source={source}
-                          onPreview={collectionId ? handleSourcePreview : undefined}
-                        />
                       ))}
                     </div>
                   </div>

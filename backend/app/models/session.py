@@ -36,6 +36,7 @@ class SessionMessage(Base):
     role = Column(String(20), nullable=False)  # 'user' 或 'assistant'
     content = Column(Text, nullable=False)  # 消息内容
     sources = Column(Text, nullable=True)  # JSON格式的来源信息（仅assistant）
+    web_search_results = Column(Text, nullable=True)  # JSON格式的网络搜索结果（仅assistant）
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # 关系

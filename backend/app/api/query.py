@@ -89,7 +89,8 @@ async def stream_response(
                 session_id=session.id,
                 role="assistant",
                 content=full_answer,
-                sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False)
+                sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False),
+                web_search_results=json.dumps([r.model_dump() for r in web_search_results], ensure_ascii=False) if web_search_results else None
             )
             db.add(assistant_msg)
 
@@ -362,7 +363,8 @@ def query(
             session_id=session.id,
             role="assistant",
             content=answer,
-            sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False)
+            sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False),
+            web_search_results=json.dumps([r.model_dump() for r in web_search_results], ensure_ascii=False) if web_search_results else None
         )
         db.add(assistant_msg)
 

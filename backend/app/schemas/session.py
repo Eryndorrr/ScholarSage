@@ -12,6 +12,7 @@ class SessionMessageResponse(SessionMessageBase):
     id: str
     session_id: str
     sources: Optional[str] = None
+    web_search_results: Optional[str] = None
     created_at: datetime
 
     class Config:
