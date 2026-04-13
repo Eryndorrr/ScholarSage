@@ -1,6 +1,6 @@
 """
 文档检索器
-支持向量检索、混合检索和重排序
+支持向量检索、混合检索、重排序和查询扩展
 """
 import logging
 from typing import List, Dict, Optional
@@ -34,13 +34,24 @@ class Retriever:
         self.bm25_retriever = bm25_retriever or get_bm25_retriever()
         self.reranker = reranker or get_reranker()
 
+        # 查询扩展器（延迟加载）
+        self._query_expander = None
+
+    def _get_query_expander(self):
+        """延迟加载查询扩展器"""
+        if self._query_expander is None:
+            from app.core.rag.query_expander import QueryExpander
+            self._query_expander = QueryExpander()
+        return self._query_expander
+
     def retrieve(
         self,
         query: str,
         collection_name: str,
         top_k: int = 3,
         use_hybrid: bool = None,
-        use_rerank: bool = None
+        use_rerank: bool = None,
+        use_query_expansion: bool = None
     ) -> List[Dict]:
         """
         检索相关文档
@@ -51,6 +62,7 @@ class Retriever:
             top_k: 返回结果数量
             use_hybrid: 是否使用混合检索（默认使用配置）
             use_rerank: 是否使用重排序（默认使用配置）
+            use_query_expansion: 是否使用查询扩展（默认使用配置）
 
         Returns:
             检索结果列表
@@ -60,19 +72,38 @@ class Retriever:
             use_hybrid = settings.use_hybrid_search
         if use_rerank is None:
             use_rerank = settings.use_rerank
+        if use_query_expansion is None:
+            use_query_expansion = settings.query_expansion_enabled
 
         try:
+            # 查询扩展
+            vector_query = query  # 用于向量检索的文本
+            bm25_query = query    # 用于 BM25 检索的文本
+
+            if use_query_expansion:
+                expander = self._get_query_expander()
+                retrieval_text, expanded_bm25 = expander.expand_query(
+                    query,
+                    use_hyde=settings.query_expansion_hyde,
+                    use_keywords=settings.query_expansion_keywords,
+                    use_synonyms=settings.query_expansion_synonyms
+                )
+                vector_query = retrieval_text
+                if expanded_bm25:
+                    bm25_query = expanded_bm25
+                logger.info(f"Query expansion: vector_query='{vector_query[:50]}...', bm25_query='{bm25_query[:80]}...'")
+
             # 获取更多候选用于重排序
             candidate_count = settings.rerank_top_k if use_rerank else top_k
 
             if use_hybrid:
-                # 混合检索
-                candidates = self._hybrid_search(query, collection_name, candidate_count)
+                # 混合检索：向量和 BM25 使用各自的查询文本
+                candidates = self._hybrid_search(vector_query, bm25_query, collection_name, candidate_count)
             else:
                 # 纯向量检索
-                candidates = self._vector_search(query, collection_name, candidate_count)
+                candidates = self._vector_search(vector_query, collection_name, candidate_count)
 
-            # 重排序
+            # 重排序（始终使用原始 query）
             if use_rerank and len(candidates) > top_k:
                 candidates = self.reranker.rerank_sync(query, candidates, top_k)
 
@@ -127,7 +158,8 @@ class Retriever:
 
     def _hybrid_search(
         self,
-        query: str,
+        vector_query: str,
+        bm25_query: str,
         collection_name: str,
         top_k: int
     ) -> List[Dict]:
@@ -137,7 +169,8 @@ class Retriever:
         使用 Reciprocal Rank Fusion (RRF) 融合结果
 
         Args:
-            query: 查询文本
+            vector_query: 向量检索用文本（原始 query 或 HyDE 假设答案）
+            bm25_query: BM25 检索用文本（原始 query 或扩展后的关键词）
             collection_name: 集合名称
             top_k: 返回数量
 
@@ -147,9 +180,9 @@ class Retriever:
         # 获取比需求更多的候选
         fetch_k = min(top_k * 3, 50)
 
-        # 并行执行两种检索
-        vector_results = self._vector_search(query, collection_name, fetch_k)
-        bm25_results = self.bm25_retriever.search(collection_name, query, fetch_k)
+        # 使用各自的查询文本执行检索
+        vector_results = self._vector_search(vector_query, collection_name, fetch_k)
+        bm25_results = self.bm25_retriever.search(collection_name, bm25_query, fetch_k)
 
         # RRF 融合
         fused_results = self._rrf_fusion(

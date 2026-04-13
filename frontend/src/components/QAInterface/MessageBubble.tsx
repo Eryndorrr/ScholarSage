@@ -4,9 +4,10 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 interface MessageBubbleProps {
   type: 'user' | 'ai'
   children: ReactNode
+  onCitationClick?: (index: number) => void
 }
 
-export function MessageBubble({ type, children }: MessageBubbleProps) {
+export function MessageBubble({ type, children, onCitationClick }: MessageBubbleProps) {
   const isUser = type === 'user'
 
   // 将 children 转换为字符串
@@ -25,7 +26,7 @@ export function MessageBubble({ type, children }: MessageBubbleProps) {
           {isUser ? (
             <div className="whitespace-pre-wrap">{content}</div>
           ) : (
-            <MarkdownRenderer content={content} />
+            <MarkdownRenderer content={content} onCitationClick={onCitationClick} />
           )}
         </div>
       </div>

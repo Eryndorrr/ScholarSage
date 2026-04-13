@@ -8,6 +8,10 @@ from app.core.rag.retriever import Retriever
 from app.core.rag.generator import Generator
 from app.core.rag.dialog_manager import DialogManager
 from app.core.web_search import get_web_searcher
+from app.core.monitoring import (
+    record_rag_query, get_tracer,
+    rag_retrieval_duration_seconds, rag_generation_duration_seconds
+)
 from app.config import settings
 from functools import lru_cache
 import time
@@ -116,6 +120,7 @@ async def query_stream(
 ):
     """流式问答（支持中断）"""
     start_time = time.time()
+    tracer = get_tracer()
 
     # 获取或创建会话
     session = None
@@ -133,13 +138,23 @@ async def query_stream(
 
     # 检索相关文档
     collection_name = request.collection_id if not request.search_all else "all"
-    results = retriever.retrieve(
-        query=request.question,
-        collection_name=collection_name,
-        top_k=request.top_k,
-        use_hybrid=request.use_hybrid,
-        use_rerank=request.use_rerank
-    )
+    retrieval_start = time.time()
+    with tracer.start_as_current_span("retrieval") as span:
+        span.set_attribute("query", request.question[:100])
+        span.set_attribute("collection", collection_name)
+        results = retriever.retrieve(
+            query=request.question,
+            collection_name=collection_name,
+            top_k=request.top_k,
+            use_hybrid=request.use_hybrid,
+            use_rerank=request.use_rerank
+        )
+        span.set_attribute("results_count", len(results))
+    retrieval_duration = time.time() - retrieval_start
+    rag_retrieval_duration_seconds.labels(
+        use_hybrid=str(request.use_hybrid),
+        use_rerank=str(request.use_rerank)
+    ).observe(retrieval_duration)
 
     contexts = [r['content'] for r in results]
 
@@ -196,6 +211,48 @@ async def query_stream(
 
     confidence = confidence_sum / len(results) if results else 0.0
 
+    # 无答案检测：所有来源相关性都低于阈值且无网络搜索结果
+    has_relevant_sources = any(
+        s.relevance_score >= settings.min_relevance_score for s in sources
+    )
+
+    if not has_relevant_sources and not web_context:
+        # 记录无答案查询指标
+        record_rag_query(
+            duration=time.time() - start_time,
+            has_web_search=False,
+            has_answer=False,
+            confidence=0.0,
+            sources_count=0,
+            retrieval_duration=retrieval_duration,
+            use_hybrid=request.use_hybrid,
+            use_rerank=request.use_rerank,
+            stream=True
+        )
+        no_answer_msg = "抱歉，在当前知识库中未找到与您的问题相关的内容。请尝试换个问法，或检查知识库中是否包含相关文档。"
+
+        async def no_result_stream():
+            yield no_answer_msg
+
+        return StreamingResponse(
+            stream_response(
+                no_result_stream(),
+                sources,
+                [],
+                0.0,
+                time.time() - start_time,
+                db,
+                request,
+                session
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
     # 创建流式生成器
     async def answer_stream():
         """异步流式生成答案"""
@@ -204,7 +261,8 @@ async def query_stream(
                 question=request.question,
                 contexts=full_context,
                 history=history,
-                summary=summary
+                summary=summary,
+                web_contexts_count=len(web_search_results)
             ):
                 yield chunk
                 await asyncio.sleep(0)  # 允许中断
@@ -213,6 +271,20 @@ async def query_stream(
             raise
 
     response_time = time.time() - start_time
+
+    # 记录正常查询指标
+    record_rag_query(
+        duration=response_time,
+        has_web_search=bool(web_search_results),
+        has_answer=True,
+        confidence=confidence,
+        sources_count=len(sources),
+        retrieval_duration=retrieval_duration,
+        model=settings.openai_model,
+        use_hybrid=request.use_hybrid,
+        use_rerank=request.use_rerank,
+        stream=True
+    )
 
     return StreamingResponse(
         stream_response(
@@ -244,6 +316,7 @@ def query(
 ):
     """智能问答（支持多轮对话和联网检索）"""
     start_time = time.time()
+    tracer = get_tracer()
 
     # 获取或创建会话
     session = None
@@ -265,13 +338,23 @@ def query(
 
     # 检索相关文档（支持混合检索和重排序）
     collection_name = request.collection_id if not request.search_all else "all"
-    results = retriever.retrieve(
-        query=request.question,
-        collection_name=collection_name,
-        top_k=request.top_k,
-        use_hybrid=request.use_hybrid,
-        use_rerank=request.use_rerank
-    )
+    retrieval_start = time.time()
+    with tracer.start_as_current_span("retrieval") as span:
+        span.set_attribute("query", request.question[:100])
+        span.set_attribute("collection", collection_name)
+        results = retriever.retrieve(
+            query=request.question,
+            collection_name=collection_name,
+            top_k=request.top_k,
+            use_hybrid=request.use_hybrid,
+            use_rerank=request.use_rerank
+        )
+        span.set_attribute("results_count", len(results))
+    retrieval_duration = time.time() - retrieval_start
+    rag_retrieval_duration_seconds.labels(
+        use_hybrid=str(request.use_hybrid),
+        use_rerank=str(request.use_rerank)
+    ).observe(retrieval_duration)
 
     # 准备上下文
     contexts = [r['content'] for r in results]
@@ -316,12 +399,17 @@ def query(
         full_context = contexts + [web_context]
 
     # 生成答案（支持多轮上下文）
-    answer = generator.generate_answer(
-        question=request.question,
-        contexts=full_context,
-        history=history,
-        summary=summary
-    )
+    with tracer.start_as_current_span("generation") as span:
+        span.set_attribute("contexts_count", len(full_context))
+        span.set_attribute("web_contexts_count", len(web_search_results))
+        answer = generator.generate_answer(
+            question=request.question,
+            contexts=full_context,
+            history=history,
+            summary=summary,
+            web_contexts_count=len(web_search_results)
+        )
+        span.set_attribute("answer_length", len(answer))
 
     # 计算响应时间
     response_time = time.time() - start_time
@@ -347,6 +435,32 @@ def query(
         ))
 
     confidence = confidence_sum / len(results) if results else 0.0
+
+    # 无答案检测：所有来源相关性都低于阈值且无网络搜索结果
+    has_relevant_sources = any(
+        s.relevance_score >= settings.min_relevance_score for s in sources
+    )
+
+    if not has_relevant_sources and not web_context:
+        # 记录无答案查询指标
+        record_rag_query(
+            duration=time.time() - start_time,
+            has_web_search=False,
+            has_answer=False,
+            confidence=0.0,
+            sources_count=0,
+            retrieval_duration=retrieval_duration,
+            use_hybrid=request.use_hybrid,
+            use_rerank=request.use_rerank,
+            stream=False
+        )
+        return QueryResponse(
+            answer="抱歉，在当前知识库中未找到与您的问题相关的内容。请尝试换个问法，或检查知识库中是否包含相关文档。",
+            sources=sources,
+            confidence=0.0,
+            response_time=time.time() - start_time,
+            web_search_results=[]
+        )
 
     # 保存到会话
     if request.session_id and session:
@@ -401,6 +515,20 @@ def query(
         except Exception as e:
             logger.error(f"Failed to save query history: {e}")
             db.rollback()
+
+    # 记录正常查询指标
+    record_rag_query(
+        duration=response_time,
+        has_web_search=bool(web_search_results),
+        has_answer=True,
+        confidence=confidence,
+        sources_count=len(sources),
+        retrieval_duration=retrieval_duration,
+        model=settings.openai_model,
+        use_hybrid=request.use_hybrid,
+        use_rerank=request.use_rerank,
+        stream=False
+    )
 
     return QueryResponse(
         answer=answer,

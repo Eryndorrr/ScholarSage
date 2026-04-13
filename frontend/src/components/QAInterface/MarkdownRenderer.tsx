@@ -5,72 +5,75 @@ import 'highlight.js/styles/github-dark.css'
 
 interface MarkdownRendererProps {
   content: string
+  onCitationClick?: (index: number) => void
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+/**
+ * 预处理内容，将引用标记转换为特殊链接格式
+ * [1] -> [1](#citation-1)
+ * [W1] -> [W1](#citation-W1)
+ */
+function preprocessCitations(content: string): string {
+  // 先处理网络来源 [W1], [W2] 等
+  let processed = content.replace(/\[(W\d+)\]/g, '[$1](#citation-$1)')
+  // 再处理本地来源 [1], [2] 等
+  processed = processed.replace(/\[(\d+)\]/g, '[$1](#citation-$1)')
+  return processed
+}
+
+export function MarkdownRenderer({ content, onCitationClick }: MarkdownRendererProps) {
+  // 预处理引用标记
+  const processedContent = preprocessCitations(content)
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          // 段落
-          p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
-
-          // 标题
-          h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-4 first:mt-0">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h3>,
-
-          // 列表
-          ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-          ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-
-          // 代码块
-          pre: ({ children }) => (
-            <pre className="bg-gray-900 rounded-lg p-3 my-3 overflow-x-auto text-sm">
-              {children}
-            </pre>
-          ),
-          code: ({ className, children, ...props }) => {
-            const isInline = !className
-            if (isInline) {
+          // 自定义链接渲染，处理引用标签
+          a: ({ href, children }) => {
+            // 检测是否为引用链接（支持 [1] 和 [W1] 格式）
+            const citationMatch = href?.match(/^#citation-(\d+|W\d+)$/)
+            if (citationMatch && onCitationClick) {
+              const citation = citationMatch[1]
+              // W1 格式传负数索引，如 W1 -> -1，W2 -> -2
+              const index = citation.startsWith('W')
+                ? -parseInt(citation.slice(1), 10)
+                : parseInt(citation, 10)
               return (
-                <code className="bg-gray-200 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onCitationClick(index)
+                  }}
+                  className={`inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 text-xs font-medium rounded-full hover:bg-blue-200 hover:text-blue-800 cursor-pointer transition-colors align-middle mx-0.5 ${
+                    citation.startsWith('W')
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}
+                  title={`查看来源 ${citation}`}
+                >
                   {children}
-                </code>
+                </button>
               )
             }
+            // 普通链接
             return (
-              <code className={className} {...props}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 underline"
+              >
                 {children}
-              </code>
+              </a>
             )
           },
 
-          // 引用
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-gray-300 pl-3 my-3 text-gray-600 italic">
-              {children}
-            </blockquote>
-          ),
-
-          // 链接
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500 hover:text-blue-600 underline"
-            >
-              {children}
-            </a>
-          ),
-
-          // 表格
+          // 保留原有的表格和格式组件
           table: ({ children }) => (
-            <div className="overflow-x-auto my-3">
+            <div className="overflow-x-auto my-4">
               <table className="min-w-full border-collapse border border-gray-300 text-sm">
                 {children}
               </table>
@@ -95,7 +98,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           del: ({ children }) => <del className="line-through text-gray-500">{children}</del>,
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )

@@ -40,9 +40,29 @@ export function ChatWindow({
   const [messages, setMessages] = useState<Message[]>([])
   const [previewSource, setPreviewSource] = useState<Source | null>(null)
   const [inputValue, setInputValue] = useState('')
+  const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null)
   const { queryStream, abort, isLoading } = useQuery()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isFirstQuery = useRef(true)
+
+  // 处理引用点击
+  const handleCitationClick = (index: number) => {
+    // 设置高亮
+    setHighlightedCitation(index)
+    // 3秒后取消高亮
+    setTimeout(() => setHighlightedCitation(null), 3000)
+
+    // 计算实际的 source 元素 ID
+    // 本地来源: index > 0, 对应 source-1, source-2 等
+    // 网络来源: index < 0 (如 -1 表示 W1), 对应 source-(本地数+abs(index))
+    const sourceId = index > 0 ? `source-${index}` : `source-${index}`
+
+    // 滚动到对应的来源卡片
+    const sourceElement = document.getElementById(sourceId)
+    if (sourceElement) {
+      sourceElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
 
   // 同步 session 消息到本地状态
   useEffect(() => {
@@ -218,7 +238,7 @@ export function ChatWindow({
           <div className="max-w-3xl mx-auto space-y-4">
             {messages.map((msg) => (
               <div key={msg.id}>
-                <MessageBubble type={msg.type}>
+                <MessageBubble type={msg.type} onCitationClick={handleCitationClick}>
                   {msg.content || (msg.isStreaming && (
                     <div className="flex items-center gap-2">
                       <div className="flex gap-1">
@@ -241,11 +261,14 @@ export function ChatWindow({
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       {msg.sources.map((source, sIdx) => (
-                        <SourceCard
-                          key={sIdx}
-                          source={source}
-                          onPreview={collectionId ? handleSourcePreview : undefined}
-                        />
+                        <div id={`source-${sIdx + 1}`} key={sIdx}>
+                          <SourceCard
+                            source={source}
+                            index={sIdx + 1}
+                            highlighted={highlightedCitation === sIdx + 1}
+                            onPreview={collectionId ? handleSourcePreview : undefined}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -259,29 +282,43 @@ export function ChatWindow({
                       <span className="text-xs font-medium text-blue-600">网络搜索结果</span>
                     </div>
                     <div className="space-y-1.5">
-                      {msg.webSearchResults.map((result, sIdx) => (
-                        <a
-                          key={sIdx}
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block p-2 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm transition-colors"
-                        >
-                          <div className="flex items-start gap-2">
-                            <span className="text-blue-600 font-medium flex-1 truncate">
-                              {result.title}
-                            </span>
-                            {result.source && (
-                              <span className="text-xs text-gray-400 flex-shrink-0">
-                                {result.source}
+                      {msg.webSearchResults.map((result, sIdx) => {
+                        const webIndex = -(sIdx + 1) // W1 -> -1, W2 -> -2
+                        return (
+                          <a
+                            key={sIdx}
+                            href={result.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            id={`source-${webIndex}`}
+                            className={`block p-2 rounded-lg text-sm transition-colors ${
+                              highlightedCitation === webIndex
+                                ? 'bg-green-100 ring-2 ring-green-300'
+                                : 'bg-blue-50 hover:bg-blue-100'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="flex-shrink-0 inline-flex items-center justify-center
+                                             min-w-[24px] h-[24px] px-1
+                                             text-xs font-mono font-medium rounded
+                                             bg-green-100 text-green-700">
+                                W{sIdx + 1}
                               </span>
-                            )}
-                          </div>
-                          <p className="text-gray-600 text-xs mt-0.5 line-clamp-2">
-                            {result.snippet}
-                          </p>
-                        </a>
-                      ))}
+                              <span className="text-blue-600 font-medium flex-1 truncate">
+                                {result.title}
+                              </span>
+                              {result.source && (
+                                <span className="text-xs text-gray-400 flex-shrink-0">
+                                  {result.source}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-gray-600 text-xs mt-0.5 ml-8 line-clamp-2">
+                              {result.snippet}
+                            </p>
+                          </a>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

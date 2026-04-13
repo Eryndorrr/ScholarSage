@@ -4,19 +4,41 @@ import type { Source } from '../../types/document'
 
 interface SourceCardProps {
   source: Source
+  index?: number           // 来源序号（从 1 开始）
+  highlighted?: boolean    // 是否高亮
   onPreview?: (source: Source) => void
 }
 
-export function SourceCard({ source, onPreview }: SourceCardProps) {
+export function SourceCard({ source, index, highlighted, onPreview }: SourceCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+    <div
+      className={`rounded-lg border transition-all duration-300 ${
+        highlighted
+          ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-50'
+          : 'border-gray-200 bg-gray-50 hover:border-blue-300'
+      }`}
+    >
       {/* 头部 */}
       <div
         onClick={() => setExpanded(!expanded)}
         className="flex items-start gap-2 p-3 cursor-pointer"
       >
+        {/* 序号标签 */}
+        {index !== undefined && (
+          <span className={`flex-shrink-0 inline-flex items-center justify-center
+                         min-w-[24px] h-[24px] px-1
+                         text-xs font-mono font-medium rounded
+                         ${highlighted
+                           ? 'bg-blue-500 text-white'
+                           : 'bg-gray-200 text-gray-600'
+                         } align-middle`}
+          >
+            {index}
+          </span>
+        )}
+
         <div className="p-1.5 bg-white rounded border flex-shrink-0">
           <FileText className="w-3.5 h-3.5 text-gray-500" />
         </div>

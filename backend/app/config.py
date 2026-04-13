@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"  # 支持自定义API端点
     embedding_model: str = "text-embedding-ada-002"
 
+    # LLM 可靠性配置
+    llm_fallback_models: str = ""  # 备用模型列表，逗号分隔，如 "gpt-4,gpt-3.5-turbo-16k"
+    llm_max_retries: int = 3  # 最大重试次数
+    llm_retry_delay: float = 1.0  # 初始重试延迟（秒）
+    llm_retry_multiplier: float = 2.0  # 重试延迟倍数（指数退避）
+    llm_timeout: int = 60  # API 请求超时时间（秒）
+
     # RAGAS 评估专用配置（可选，默认使用 openai 配置）
     ragas_api_key: Optional[str] = None  # 评估用 API Key，默认使用 openai_api_key
     ragas_model: str = "gpt-3.5-turbo"  # 评估用模型
@@ -52,6 +59,15 @@ class Settings(BaseSettings):
     bocha_api_key: Optional[str] = None  # Bocha API Key
     web_search_max_results: int = 5  # 每次搜索返回的最大结果数
     web_search_proxy: Optional[str] = None  # 代理设置，如 "http://127.0.0.1:7890"
+
+    # 检索相关性配置
+    min_relevance_score: float = 0.3  # 最低相关性分数阈值，低于此值视为无相关内容
+
+    # 查询扩展配置
+    query_expansion_enabled: bool = False  # 是否启用查询扩展
+    query_expansion_hyde: bool = False  # HyDE：用假设答案替代原始查询做向量检索
+    query_expansion_keywords: bool = True  # 关键词提取：增强 BM25 检索
+    query_expansion_synonyms: bool = True  # 同义词扩展：扩大检索覆盖面
 
     class Config:
         env_file = ".env"

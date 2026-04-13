@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 from app.api import collections, documents, query, sessions, papers, evaluation, knowledge_graph
+from app.core.monitoring import setup_monitoring
 import os
 import logging
 import sys
@@ -66,3 +67,7 @@ def root():
 def health_check():
     """健康检查"""
     return {"status": "healthy"}
+
+
+# 初始化监控（必须在路由注册之后）
+setup_monitoring(app)
