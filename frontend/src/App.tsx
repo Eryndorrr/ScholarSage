@@ -11,6 +11,7 @@ import { PaperList } from './components/PaperManager/PaperList'
 import { PaperDetail } from './components/PaperManager/PaperDetail'
 import { EvaluationPage } from './components/Evaluation/EvaluationPage'
 import { KnowledgeGraphPage } from './components/KnowledgeGraph/KnowledgeGraphPage'
+import { HealthDashboard } from './components/Dashboard/HealthDashboard'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
 import type { Session, SessionMessage } from './types/session'
@@ -30,6 +31,7 @@ function App() {
   const [selectedPaper, setSelectedPaper] = useState<string | null>(null)
   const [showEvaluationPage, setShowEvaluationPage] = useState(false)
   const [showGraphPage, setShowGraphPage] = useState(false)
+  const [showDashboard, setShowDashboard] = useState(false)
 
   // Session 状态
   const [sessions, setSessions] = useState<Session[]>([])
@@ -233,7 +235,9 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {showGraphPage ? (
+      {showDashboard ? (
+        <HealthDashboard onBack={() => setShowDashboard(false)} />
+      ) : showGraphPage ? (
         <KnowledgeGraphPage onBack={() => setShowGraphPage(false)} />
       ) : showEvaluationPage ? (
         <EvaluationPage onBack={() => setShowEvaluationPage(false)} />
@@ -242,6 +246,7 @@ function App() {
           <Header
             onEvaluationClick={() => setShowEvaluationPage(true)}
             onGraphClick={() => setShowGraphPage(true)}
+            onDashboardClick={() => setShowDashboard(true)}
           />
 
           <div className="flex-1 flex overflow-hidden">

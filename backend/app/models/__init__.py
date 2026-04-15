@@ -6,9 +6,10 @@ from app.models.session import Session, SessionMessage
 from app.models.paper import Paper
 from app.models.citation import Citation
 from app.models.evaluation import Evaluation, EvaluationStatus
+from app.models.benchmark import BenchmarkQA
 
 __all__ = [
     "Collection", "Document", "FileType", "ProcessStatus", "Chunk",
     "QueryHistory", "Session", "SessionMessage", "Paper", "Citation",
-    "Evaluation", "EvaluationStatus"
+    "Evaluation", "EvaluationStatus", "BenchmarkQA"
 ]
