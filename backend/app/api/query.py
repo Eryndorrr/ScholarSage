@@ -307,7 +307,7 @@ async def query_stream(
 
 
 @router.post("", response_model=QueryResponse)
-def query(
+async def query(
     request: QueryRequest,
     db: Session = Depends(get_db),
     retriever: Retriever = Depends(get_retriever),
@@ -372,8 +372,7 @@ def query(
         try:
             web_searcher = get_web_searcher()
             if web_searcher.is_available():
-                # 执行异步搜索
-                search_response = asyncio.run(web_searcher.search(request.question))
+                search_response = await web_searcher.search(request.question)
 
                 if search_response.success:
                     web_context = web_searcher.format_results_for_context(search_response)

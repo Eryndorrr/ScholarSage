@@ -22,9 +22,17 @@ logger = logging.getLogger(__name__)
 os.makedirs("data", exist_ok=True)
 os.makedirs("uploads", exist_ok=True)
 
-# 创建数据库表
-Base.metadata.create_all(bind=engine)
-logger.info("Database tables created")
+# 创建数据库表（仅作为开发环境的后备方案，生产环境请使用 alembic upgrade head）
+try:
+    from alembic.config import Config as AlembicConfig
+    from alembic import command
+    alembic_cfg = AlembicConfig("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrated via Alembic")
+except Exception:
+    # Alembic 不可用时回退到 create_all（开发环境）
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created (fallback)")
 
 # 创建FastAPI应用
 app = FastAPI(

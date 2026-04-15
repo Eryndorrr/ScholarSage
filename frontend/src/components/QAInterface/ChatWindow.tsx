@@ -52,13 +52,8 @@ export function ChatWindow({
     // 3秒后取消高亮
     setTimeout(() => setHighlightedCitation(null), 3000)
 
-    // 计算实际的 source 元素 ID
-    // 本地来源: index > 0, 对应 source-1, source-2 等
-    // 网络来源: index < 0 (如 -1 表示 W1), 对应 source-(本地数+abs(index))
-    const sourceId = index > 0 ? `source-${index}` : `source-${index}`
-
     // 滚动到对应的来源卡片
-    const sourceElement = document.getElementById(sourceId)
+    const sourceElement = document.getElementById(`source-${index}`)
     if (sourceElement) {
       sourceElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
@@ -68,12 +63,29 @@ export function ChatWindow({
   useEffect(() => {
     const convertedMessages: Message[] = []
     for (const msg of sessionMessages) {
+      let sources: Source[] | undefined
+      let webSearchResults: WebSearchResult[] | undefined
+
+      try {
+        sources = msg.sources ? JSON.parse(msg.sources) : undefined
+      } catch {
+        console.warn('Failed to parse sources for message:', msg.id)
+        sources = undefined
+      }
+
+      try {
+        webSearchResults = msg.web_search_results ? JSON.parse(msg.web_search_results) : undefined
+      } catch {
+        console.warn('Failed to parse web_search_results for message:', msg.id)
+        webSearchResults = undefined
+      }
+
       convertedMessages.push({
         id: `msg-${Date.now()}-${Math.random()}`,
         type: msg.role as 'user' | 'ai',
         content: msg.content,
-        sources: msg.sources ? JSON.parse(msg.sources) : undefined,
-        webSearchResults: msg.web_search_results ? JSON.parse(msg.web_search_results) : undefined
+        sources,
+        webSearchResults
       })
     }
     setMessages(convertedMessages)
