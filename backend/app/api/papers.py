@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models import Document, Paper, Citation, Collection
+from app.models.user import User
 from app.schemas import (
     PaperCreate, PaperUpdate, PaperResponse,
     PaperListResponse, PaperWithCitationsResponse,
@@ -14,6 +15,7 @@ from app.schemas import (
 )
 from app.core.parsers.paper_parser import PaperParser
 from app.core.parsers.llm_paper_parser import LLMPaperParser
+from app.core.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,12 +23,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
 
+def _verify_collection_owner(collection_id: str, current_user: User, db: Session):
+    """验证知识库属于当前用户"""
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
+
+
+def _verify_document_owner(document_id: str, current_user: User, db: Session):
+    """验证文档属于当前用户（通过 collection 间接验证）"""
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _verify_collection_owner(document.collection_id, current_user, db)
+    return document
+
+
 @router.post("/parse", response_model=PaperResponse)
 async def parse_paper(
     document_id: str,
     use_llm: bool = Query(False, description="是否使用 LLM 解析（更准确但需要 API 调用）"),
     force: bool = Query(False, description="是否强制重新解析（覆盖已有结果）"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     解析文档中的论文元数据
@@ -36,10 +59,8 @@ async def parse_paper(
         use_llm: 是否使用 LLM 解析（默认 False 使用规则解析，True 使用 LLM 更准确）
         force: 是否强制重新解析（默认 False，已有结果时直接返回）
     """
-    # 查找文档
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
+    # 查找文档并验证归属
+    document = _verify_document_owner(document_id, current_user, db)
 
     # 检查是否已解析
     existing_paper = db.query(Paper).filter(Paper.document_id == document_id).first()
@@ -107,9 +128,11 @@ async def parse_paper(
 @router.get("/by-document/{document_id}", response_model=PaperResponse)
 def get_paper_by_document(
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """通过文档ID获取论文信息"""
+    _verify_document_owner(document_id, current_user, db)
     paper = db.query(Paper).filter(Paper.document_id == document_id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
@@ -119,7 +142,8 @@ def get_paper_by_document(
 @router.get("/{paper_id}", response_model=PaperWithCitationsResponse)
 def get_paper(
     paper_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取论文详情（含引用数量）"""
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
@@ -148,7 +172,8 @@ def get_paper(
 def update_paper(
     paper_id: str,
     paper_update: PaperUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """更新论文元数据"""
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
@@ -167,7 +192,8 @@ def update_paper(
 @router.get("/{paper_id}/citations", response_model=CitationListResponse)
 def get_paper_citations(
     paper_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取论文的引用列表"""
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
@@ -181,7 +207,8 @@ def get_paper_citations(
 @router.post("/generate-bibtex", response_model=BibTeXExportResponse)
 def generate_bibtex(
     request: BibTeXExportRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """生成选定论文的BibTeX"""
     bibtex_entries = []
@@ -213,7 +240,8 @@ def list_papers_by_collection(
     sort_order: Optional[str] = Query("desc", description="排序方向（asc, desc）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取知识库中的论文列表（支持搜索、过滤、排序、分页）
@@ -229,7 +257,10 @@ def list_papers_by_collection(
         page: 页码（从1开始）
         page_size: 每页数量（1-100）
     """
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -292,7 +323,8 @@ def list_papers_by_collection(
 @router.delete("/{paper_id}")
 def delete_paper(
     paper_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """删除论文（同时删除关联的引用）"""
     paper = db.query(Paper).filter(Paper.id == paper_id).first()

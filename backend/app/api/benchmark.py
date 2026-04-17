@@ -10,6 +10,7 @@ import logging
 from app.database import get_db
 from app.models.benchmark import BenchmarkQA
 from app.models.collection import Collection
+from app.models.user import User
 from app.schemas.benchmark import (
     BenchmarkQACreate, BenchmarkQAResponse, BenchmarkQAListResponse,
     BenchmarkGenerateRequest, BenchmarkEvaluateRequest,
@@ -17,10 +18,22 @@ from app.schemas.benchmark import (
     HallucinationDetectRequest, HallucinationDetectResponse,
     HallucinationClaimResponse
 )
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
+
+
+def _verify_collection_owner(collection_id: str, current_user: User, db: Session):
+    """验证知识库属于当前用户"""
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
 
 
 # ===== 基准集 CRUD =====
@@ -28,9 +41,11 @@ router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
 @router.post("", response_model=BenchmarkQAResponse)
 def create_benchmark_qa(
     request: BenchmarkQACreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """手动创建基准 QA 对"""
+    _verify_collection_owner(request.collection_id, current_user, db)
     qa = BenchmarkQA(
         collection_id=request.collection_id,
         question=request.question,
@@ -57,9 +72,11 @@ def list_benchmarks(
     reviewed: Optional[bool] = None,
     limit: int = 50,
     offset: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取知识库的基准 QA 列表"""
+    _verify_collection_owner(collection_id, current_user, db)
     query = db.query(BenchmarkQA).filter(
         BenchmarkQA.collection_id == collection_id
     )
@@ -83,7 +100,8 @@ def review_benchmark_qa(
     approved: bool = True,
     question: Optional[str] = None,
     gold_answer: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """审核基准 QA（修改内容并标记审核通过/不通过）"""
     qa = db.query(BenchmarkQA).filter(BenchmarkQA.id == qa_id).first()
@@ -102,7 +120,11 @@ def review_benchmark_qa(
 
 
 @router.delete("/{qa_id}")
-def delete_benchmark_qa(qa_id: str, db: Session = Depends(get_db)):
+def delete_benchmark_qa(
+    qa_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """删除基准 QA"""
     qa = db.query(BenchmarkQA).filter(BenchmarkQA.id == qa_id).first()
     if not qa:
@@ -118,15 +140,11 @@ def delete_benchmark_qa(qa_id: str, db: Session = Depends(get_db)):
 @router.post("/generate", response_model=BenchmarkQAListResponse)
 def generate_benchmarks(
     request: BenchmarkGenerateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """从知识库文档自动生成基准 QA 对"""
-    # 验证知识库存在
-    collection = db.query(Collection).filter(
-        Collection.id == request.collection_id
-    ).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    _verify_collection_owner(request.collection_id, current_user, db)
 
     from app.core.evaluation.benchmark_generator import BenchmarkGenerator
     generator = BenchmarkGenerator()
@@ -170,9 +188,11 @@ def generate_benchmarks(
 @router.post("/evaluate", response_model=BenchmarkEvaluateResponse)
 def evaluate_with_benchmark(
     request: BenchmarkEvaluateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """使用基准集评估系统表现"""
+    _verify_collection_owner(request.collection_id, current_user, db)
     # 获取基准 QA
     query = db.query(BenchmarkQA).filter(
         BenchmarkQA.collection_id == request.collection_id,
@@ -317,7 +337,10 @@ def _compute_similarity(question: str, gold_answer: str, system_answer: str) -> 
 # ===== 幻觉检测 =====
 
 @router.post("/hallucination-detect", response_model=HallucinationDetectResponse)
-def detect_hallucination(request: HallucinationDetectRequest):
+def detect_hallucination(
+    request: HallucinationDetectRequest,
+    current_user: User = Depends(get_current_user),
+):
     """检测答案中的幻觉"""
     from app.core.evaluation.hallucination_detector import HallucinationDetector
 

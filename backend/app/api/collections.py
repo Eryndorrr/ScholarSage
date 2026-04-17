@@ -5,8 +5,10 @@ from typing import List
 import logging
 from app.database import get_db
 from app.models import Collection, Document
+from app.models.user import User
 from app.schemas import CollectionCreate, CollectionUpdate, CollectionResponse
 from app.core.rag.vector_store import VectorStore
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 logger = logging.getLogger(__name__)
@@ -15,10 +17,11 @@ logger = logging.getLogger(__name__)
 @router.post("", response_model=CollectionResponse)
 def create_collection(
     collection: CollectionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """创建知识库"""
-    db_collection = Collection(**collection.model_dump())
+    db_collection = Collection(**collection.model_dump(), user_id=current_user.id)
     db.add(db_collection)
     db.commit()
     db.refresh(db_collection)
@@ -26,9 +29,12 @@ def create_collection(
 
 
 @router.get("")
-def list_collections(db: Session = Depends(get_db)):
+def list_collections(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """获取知识库列表"""
-    collections = db.query(Collection).all()
+    collections = db.query(Collection).filter(Collection.user_id == current_user.id).all()
     # 更新每个 collection 的文档数量
     result = []
     for c in collections:
@@ -48,9 +54,16 @@ def list_collections(db: Session = Depends(get_db)):
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)
-def get_collection(collection_id: str, db: Session = Depends(get_db)):
+def get_collection(
+    collection_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """获取单个知识库"""
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
@@ -74,10 +87,14 @@ def get_collection(collection_id: str, db: Session = Depends(get_db)):
 def update_collection(
     collection_id: str,
     collection_update: CollectionUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """更新知识库"""
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
@@ -105,9 +122,16 @@ def update_collection(
 
 
 @router.delete("/{collection_id}")
-def delete_collection(collection_id: str, db: Session = Depends(get_db)):
+def delete_collection(
+    collection_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """删除知识库"""
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         raise HTTPException(status_code=404, detail="知识库不存在")
 

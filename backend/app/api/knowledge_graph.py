@@ -9,10 +9,23 @@ import logging
 
 from app.database import get_db
 from app.models import Collection, Document, Paper, Citation
+from app.models.user import User
 from app.core.graph.topic_cluster import get_topic_cluster
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/api/graph", tags=["knowledge-graph"])
 logger = logging.getLogger(__name__)
+
+
+def _verify_collection_owner(collection_id: str, current_user: User, db: Session):
+    """验证知识库属于当前用户"""
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    return collection
 
 
 @router.get("/citation/{collection_id}")
@@ -20,26 +33,13 @@ def get_citation_graph(
     collection_id: str,
     include_external: bool = False,
     min_external_citations: int = 2,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取引用关系图谱数据
-
-    Args:
-        collection_id: 知识库 ID
-        include_external: 是否包含外部参考文献（默认不包含）
-        min_external_citations: 外部文献最少被引次数（仅当 include_external=True 时生效）
-
-    Returns:
-        图谱数据（节点 + 边）
-        - 内部论文节点：type="internal"
-        - 外部参考文献节点：type="external"（仅在 include_external=True 时返回）
-        - 外部文献之间的引用关系：type="external_internal_cite"（高被引外部文献之间的引用）
     """
-    # 验证 collection 存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 获取该 collection 下的所有论文
     papers = db.query(Paper).join(Document).filter(
@@ -240,19 +240,13 @@ def get_citation_graph(
 def get_paper_external_refs(
     collection_id: str,
     paper_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取指定论文的外部引用文献（按需加载）
-
-    Args:
-        collection_id: 知识库 ID
-        paper_id: 论文 ID
-
-    Returns:
-        外部引用文献列表
     """
-    # 验证论文存在
+    _verify_collection_owner(collection_id, current_user, db)
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="论文不存在")
@@ -308,21 +302,13 @@ def get_paper_external_refs(
 @router.get("/topic-clusters/{collection_id}")
 def get_topic_clusters(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取主题聚类数据
-
-    Args:
-        collection_id: 知识库 ID
-
-    Returns:
-        聚类数据
     """
-    # 验证 collection 存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 获取该 collection 下的所有论文
     papers = db.query(Paper).join(Document).filter(
@@ -371,21 +357,13 @@ def get_topic_clusters(
 @router.get("/keywords/{collection_id}")
 def get_keyword_network(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取关键词共现网络
-
-    Args:
-        collection_id: 知识库 ID
-
-    Returns:
-        关键词网络数据
     """
-    # 验证 collection 存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 获取该 collection 下的所有论文
     papers = db.query(Paper).join(Document).filter(
@@ -451,21 +429,13 @@ def get_keyword_network(
 @router.get("/stats/{collection_id}")
 def get_graph_stats(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取知识图谱统计信息
-
-    Args:
-        collection_id: 知识库 ID
-
-    Returns:
-        统计数据
     """
-    # 验证 collection 存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 统计论文数量
     paper_count = db.query(Paper).join(Document).filter(

@@ -12,15 +12,44 @@ import { PaperDetail } from './components/PaperManager/PaperDetail'
 import { EvaluationPage } from './components/Evaluation/EvaluationPage'
 import { KnowledgeGraphPage } from './components/KnowledgeGraph/KnowledgeGraphPage'
 import { HealthDashboard } from './components/Dashboard/HealthDashboard'
+import { AuthPage } from './components/Auth/AuthPage'
+import { SettingsModal } from './components/Auth/SettingsModal'
+import { AdminPage } from './components/Admin/AdminPage'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { useState, useEffect, useRef } from 'react'
 import type { Document } from './types/document'
 import type { Session, SessionMessage } from './types/session'
 import { sessionService } from './services/sessionService'
+import { apiClient } from './services/api'
 import { FileText, FolderOpen, MessageSquare, Plus, Trash2, MessageCircle, BookOpen, FileStack } from 'lucide-react'
 
 const queryClient = new QueryClient()
 
-function App() {
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  // 加载中显示 loading
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 未认证显示登录页
+  if (!isAuthenticated) {
+    return <AuthPage />
+  }
+
+  // 已认证显示主界面
+  return <MainApp />
+}
+
+function MainApp() {
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
@@ -32,6 +61,8 @@ function App() {
   const [showEvaluationPage, setShowEvaluationPage] = useState(false)
   const [showGraphPage, setShowGraphPage] = useState(false)
   const [showDashboard, setShowDashboard] = useState(false)
+  const [showAdminPage, setShowAdminPage] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   // Session 状态
   const [sessions, setSessions] = useState<Session[]>([])
@@ -40,16 +71,13 @@ function App() {
 
   const pollingRef = useRef<number | null>(null)
 
-  // 加载文档列表
+  // 加载文档列表 (使用 apiClient)
   const fetchDocuments = async () => {
     if (!selectedCollection) return
     try {
-      const response = await fetch(`/api/collections/${selectedCollection}/documents`)
-      if (response.ok) {
-        const data = await response.json()
-        setDocuments(data)
-        return data
-      }
+      const response = await apiClient.get(`/api/collections/${selectedCollection}/documents`)
+      setDocuments(response.data)
+      return response.data
     } catch (error) {
       console.error('Failed to fetch documents:', error)
     }
@@ -206,11 +234,10 @@ function App() {
     if (!confirm('确定要删除这个文档吗？')) return
 
     try {
-      const response = await fetch(
-        `/api/collections/${selectedCollection}/documents/${documentId}`,
-        { method: 'DELETE' }
+      const response = await apiClient.delete(
+        `/api/collections/${selectedCollection}/documents/${documentId}`
       )
-      if (response.ok) {
+      if (response.status === 200) {
         setDocuments(documents.filter(d => d.id !== documentId))
       }
     } catch (error) {
@@ -235,7 +262,9 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {showDashboard ? (
+      {showAdminPage ? (
+        <AdminPage onBack={() => setShowAdminPage(false)} />
+      ) : showDashboard ? (
         <HealthDashboard onBack={() => setShowDashboard(false)} />
       ) : showGraphPage ? (
         <KnowledgeGraphPage onBack={() => setShowGraphPage(false)} />
@@ -247,6 +276,8 @@ function App() {
             onEvaluationClick={() => setShowEvaluationPage(true)}
             onGraphClick={() => setShowGraphPage(true)}
             onDashboardClick={() => setShowDashboard(true)}
+            onAdminClick={() => setShowAdminPage(true)}
+            onSettingsClick={() => setShowSettings(true)}
           />
 
           <div className="flex-1 flex overflow-hidden">
@@ -469,8 +500,23 @@ function App() {
               onClose={() => setPreviewDocument(null)}
             />
           )}
+
+          {/* 设置弹窗 */}
+          {showSettings && (
+            <SettingsModal onClose={() => setShowSettings(false)} />
+          )}
         </MainLayout>
       )}
+    </QueryClientProvider>
+  )
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

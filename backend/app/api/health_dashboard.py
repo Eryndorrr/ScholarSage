@@ -14,6 +14,8 @@ from app.models.document import Document
 from app.models.evaluation import Evaluation, EvaluationStatus
 from app.models.benchmark import BenchmarkQA
 from app.models.query_history import QueryHistory
+from app.models.user import User
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +25,14 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 @router.get("/collection/{collection_id}")
 def get_collection_health(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取单个知识库的健康度报告"""
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -152,9 +158,12 @@ def get_collection_health(
 
 
 @router.get("/overview")
-def get_overview(db: Session = Depends(get_db)):
+def get_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """获取系统整体概览"""
-    collections = db.query(Collection).all()
+    collections = db.query(Collection).filter(Collection.user_id == current_user.id).all()
 
     total_docs = 0
     total_queries = 0

@@ -23,7 +23,7 @@ from app.database import Base
 from app.models import (
     Collection, Document, FileType, ProcessStatus, Chunk,
     QueryHistory, Session, SessionMessage, Paper, Citation,
-    Evaluation, EvaluationStatus, BenchmarkQA
+    Evaluation, EvaluationStatus, BenchmarkQA, User
 )
 
 target_metadata = Base.metadata

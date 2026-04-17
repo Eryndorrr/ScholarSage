@@ -7,9 +7,10 @@ from app.models.paper import Paper
 from app.models.citation import Citation
 from app.models.evaluation import Evaluation, EvaluationStatus
 from app.models.benchmark import BenchmarkQA
+from app.models.user import User
 
 __all__ = [
     "Collection", "Document", "FileType", "ProcessStatus", "Chunk",
     "QueryHistory", "Session", "SessionMessage", "Paper", "Citation",
-    "Evaluation", "EvaluationStatus", "BenchmarkQA"
+    "Evaluation", "EvaluationStatus", "BenchmarkQA", "User"
 ]

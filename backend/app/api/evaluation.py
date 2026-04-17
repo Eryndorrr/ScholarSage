@@ -9,6 +9,7 @@ from typing import Optional
 from app.database import get_db
 from app.models.evaluation import Evaluation, EvaluationStatus as ModelEvaluationStatus
 from app.models.collection import Collection
+from app.models.user import User
 from app.schemas.evaluation import (
     EvaluationCreate,
     EvaluationResponse,
@@ -20,12 +21,24 @@ from app.schemas.evaluation import (
     EvaluationStatus
 )
 from app.core.evaluation.ragas_evaluator import get_evaluator
+from app.core.auth import get_current_user
 import logging
 import math
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/evaluation", tags=["evaluation"])
+
+
+def _verify_collection_owner(collection_id: str, current_user: User, db: Session):
+    """验证知识库属于当前用户"""
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
 
 
 def _clean_metrics(metrics: dict) -> dict:
@@ -90,7 +103,8 @@ def run_evaluation_task(
 def run_evaluation(
     request: EvaluationCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     启动评估任务
@@ -99,12 +113,7 @@ def run_evaluation(
     - 评估在后台异步执行
     """
     # 验证知识库存在
-    collection = db.query(Collection).filter(
-        Collection.id == request.collection_id
-    ).first()
-
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    _verify_collection_owner(request.collection_id, current_user, db)
 
     # 获取或生成评估问题
     if request.sample_questions:
@@ -156,7 +165,8 @@ def run_evaluation(
 @router.get("/{evaluation_id}", response_model=EvaluationDetailResponse)
 def get_evaluation(
     evaluation_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取评估详情"""
     evaluation = db.query(Evaluation).filter(
@@ -194,9 +204,11 @@ def list_evaluations_by_collection(
     status: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取指定知识库的评估列表"""
+    _verify_collection_owner(collection_id, current_user, db)
     query = db.query(Evaluation).filter(
         Evaluation.collection_id == collection_id
     )
@@ -222,9 +234,11 @@ def list_evaluations_by_collection(
 @router.get("/collection/{collection_id}/stats", response_model=EvaluationStatsResponse)
 def get_collection_evaluation_stats(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取知识库的评估统计"""
+    _verify_collection_owner(collection_id, current_user, db)
     evaluations = db.query(Evaluation).filter(
         Evaluation.collection_id == collection_id,
         Evaluation.status == ModelEvaluationStatus.COMPLETED
@@ -281,7 +295,8 @@ def get_collection_evaluation_stats(
 @router.post("/compare", response_model=EvaluationCompareResponse)
 def compare_evaluations(
     request: EvaluationCompareRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """对比多个评估结果"""
     evaluations = db.query(Evaluation).filter(
@@ -310,7 +325,8 @@ def compare_evaluations(
 @router.delete("/{evaluation_id}")
 def delete_evaluation(
     evaluation_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """删除评估记录"""
     evaluation = db.query(Evaluation).filter(

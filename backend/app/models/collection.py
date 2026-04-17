@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -14,6 +14,7 @@ class Collection(Base):
     description = Column(String(500), default="")
     color = Column(String(7), default="#1976d2")
     document_count = Column(Integer, default=0)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -21,6 +22,7 @@ class Collection(Base):
     documents = relationship("Document", back_populates="collection", cascade="all, delete-orphan")
     query_history = relationship("QueryHistory", back_populates="collection", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="collection", cascade="all, delete-orphan")
+    owner = relationship("User", backref="collections")
 
     def __repr__(self):
         return f"<Collection {self.name}>"

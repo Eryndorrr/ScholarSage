@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     query_expansion_keywords: bool = True  # 关键词提取：增强 BM25 检索
     query_expansion_synonyms: bool = True  # 同义词扩展：扩大检索覆盖面
 
+    # JWT 认证配置
+    jwt_secret: str = "change-me-in-production-use-a-strong-random-string"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_hours: int = 24
+
     class Config:
         env_file = ".env"
         case_sensitive = False

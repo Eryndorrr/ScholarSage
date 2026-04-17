@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models import Document, Collection, FileType, ProcessStatus, Paper
+from app.models.user import User
 from app.schemas import DocumentResponse, DuplicateCheckResponse
 from app.core.rag.document_processor import DocumentProcessor
+from app.core.auth import get_current_user
 import os
 import uuid
 import hashlib
@@ -13,6 +15,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
+
+
+def _verify_collection_owner(collection_id: str, current_user: User, db: Session) -> Collection:
+    """验证知识库属于当前用户"""
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    return collection
 
 
 def calculate_file_hash(content: bytes) -> str:
@@ -84,17 +97,15 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
 async def check_duplicate(
     collection_id: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     检查上传的文件是否重复
 
     通过计算文件内容的 SHA256 哈希值，检查同一知识库中是否已存在相同内容的文档
     """
-    # 验证 collection 是否存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 读取文件内容并计算哈希
     content = await file.read()
@@ -127,7 +138,8 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     skip_duplicate_check: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     上传文档并自动处理
@@ -135,10 +147,7 @@ async def upload_document(
     Args:
         skip_duplicate_check: 是否跳过重复检查（默认 False，会自动检查并拒绝重复文件）
     """
-    # 验证collection是否存在
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    _verify_collection_owner(collection_id, current_user, db)
 
     # 确定文件类型
     filename = file.filename
@@ -214,8 +223,13 @@ async def upload_document(
 
 
 @router.get("", response_model=List[DocumentResponse])
-def list_documents(collection_id: str, db: Session = Depends(get_db)):
+def list_documents(
+    collection_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """获取文档列表"""
+    _verify_collection_owner(collection_id, current_user, db)
     documents = db.query(Document).filter(
         Document.collection_id == collection_id
     ).all()
@@ -236,9 +250,11 @@ def list_documents(collection_id: str, db: Session = Depends(get_db)):
 def delete_document(
     collection_id: str,
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """删除文档"""
+    _verify_collection_owner(collection_id, current_user, db)
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.collection_id == collection_id
@@ -284,9 +300,11 @@ def delete_document(
 def get_document_content(
     collection_id: str,
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取文档内容（用于预览）"""
+    _verify_collection_owner(collection_id, current_user, db)
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.collection_id == collection_id
@@ -337,9 +355,11 @@ from fastapi.responses import FileResponse, Response
 def get_document_file(
     collection_id: str,
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取文档文件（用于PDF预览）"""
+    _verify_collection_owner(collection_id, current_user, db)
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.collection_id == collection_id

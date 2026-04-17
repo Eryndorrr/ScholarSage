@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import QueryRequest, QueryResponse, WebSearchSource
 from app.models import QueryHistory, Collection, Session, SessionMessage
+from app.models.user import User
 from app.core.rag.retriever import Retriever
 from app.core.rag.generator import Generator
 from app.core.rag.dialog_manager import DialogManager
 from app.core.web_search import get_web_searcher
+from app.core.auth import get_current_user
 from app.core.monitoring import (
     record_rag_query, get_tracer,
     rag_retrieval_duration_seconds, rag_generation_duration_seconds
@@ -23,6 +25,19 @@ from typing import AsyncGenerator
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/query", tags=["query"])
+
+
+def _verify_collection_access(collection_id: str, current_user: User, db: Session):
+    """验证知识库属于当前用户"""
+    if not collection_id:
+        return
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="知识库不存在")
 
 
 @lru_cache()
@@ -116,10 +131,13 @@ async def query_stream(
     db: Session = Depends(get_db),
     retriever: Retriever = Depends(get_retriever),
     generator: Generator = Depends(get_generator),
-    dialog_manager: DialogManager = Depends(get_dialog_manager)
+    dialog_manager: DialogManager = Depends(get_dialog_manager),
+    current_user: User = Depends(get_current_user),
 ):
     """流式问答（支持中断）"""
     start_time = time.time()
+    if request.collection_id:
+        _verify_collection_access(request.collection_id, current_user, db)
     tracer = get_tracer()
 
     # 获取或创建会话
@@ -312,10 +330,13 @@ async def query(
     db: Session = Depends(get_db),
     retriever: Retriever = Depends(get_retriever),
     generator: Generator = Depends(get_generator),
-    dialog_manager: DialogManager = Depends(get_dialog_manager)
+    dialog_manager: DialogManager = Depends(get_dialog_manager),
+    current_user: User = Depends(get_current_user),
 ):
     """智能问答（支持多轮对话和联网检索）"""
     start_time = time.time()
+    if request.collection_id:
+        _verify_collection_access(request.collection_id, current_user, db)
     tracer = get_tracer()
 
     # 获取或创建会话
@@ -542,10 +563,14 @@ async def query(
 def get_query_history(
     collection_id: str,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取知识库的查询历史"""
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
     if not collection:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="知识库不存在")
@@ -574,7 +599,8 @@ def get_query_history(
 @router.delete("/history/{history_id}")
 def delete_query_history(
     history_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """删除单条查询历史"""
     history = db.query(QueryHistory).filter(QueryHistory.id == history_id).first()
@@ -590,9 +616,11 @@ def delete_query_history(
 @router.delete("/history/collection/{collection_id}")
 def clear_query_history(
     collection_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """清空知识库的查询历史"""
+    _verify_collection_access(collection_id, current_user, db)
     deleted = db.query(QueryHistory).filter(
         QueryHistory.collection_id == collection_id
     ).delete()
