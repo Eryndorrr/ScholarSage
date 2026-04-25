@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { evaluationService } from '../../services/evaluationService'
+import { apiClient } from '../../services/api'
 import type { Evaluation, EvaluationDetail } from '../../types/evaluation'
 import {
   PlayCircle,
@@ -40,15 +41,13 @@ export function EvaluationPage({ onBack }: EvaluationPageProps) {
   useEffect(() => {
     const fetchCollections = async () => {
       try {
-        const response = await fetch('/api/collections')
-        if (response.ok) {
-          const data = await response.json()
-          // API 返回 { collections: [...] } 格式
-          const collectionsList = data.collections || data || []
-          setCollections(collectionsList)
-          if (collectionsList.length > 0) {
-            setSelectedCollection(collectionsList[0].id)
-          }
+        const response = await apiClient.get('/api/collections')
+        const data = response.data
+        // API 返回 { collections: [...] } 格式
+        const collectionsList = data.collections || data || []
+        setCollections(collectionsList)
+        if (collectionsList.length > 0) {
+          setSelectedCollection(collectionsList[0].id)
         }
       } catch (error) {
         console.error('Failed to fetch collections:', error)

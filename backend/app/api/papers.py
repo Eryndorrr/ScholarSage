@@ -204,6 +204,73 @@ def get_paper_citations(
     return CitationListResponse(citations=citations, total=len(citations))
 
 
+@router.post("/{paper_id}/citations", response_model=CitationResponse)
+def add_citation(
+    paper_id: str,
+    citation: CitationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """添加参考文献"""
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    new_citation = Citation(
+        paper_id=paper_id,
+        cited_title=citation.cited_title,
+        cited_authors=citation.cited_authors or [],
+        cited_year=citation.cited_year,
+        cited_venue=citation.cited_venue,
+        location=citation.location,
+        bibtex_raw=citation.bibtex_raw,
+    )
+    db.add(new_citation)
+    db.commit()
+    db.refresh(new_citation)
+    return new_citation
+
+
+@router.put("/citations/{citation_id}", response_model=CitationResponse)
+def update_citation(
+    citation_id: str,
+    citation_update: CitationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """更新参考文献"""
+    citation = db.query(Citation).filter(Citation.id == citation_id).first()
+    if not citation:
+        raise HTTPException(status_code=404, detail="Citation not found")
+
+    citation.cited_title = citation_update.cited_title
+    citation.cited_authors = citation_update.cited_authors or []
+    citation.cited_year = citation_update.cited_year
+    citation.cited_venue = citation_update.cited_venue
+    citation.location = citation_update.location
+    citation.bibtex_raw = citation_update.bibtex_raw
+
+    db.commit()
+    db.refresh(citation)
+    return citation
+
+
+@router.delete("/citations/{citation_id}")
+def delete_citation(
+    citation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除参考文献"""
+    citation = db.query(Citation).filter(Citation.id == citation_id).first()
+    if not citation:
+        raise HTTPException(status_code=404, detail="Citation not found")
+
+    db.delete(citation)
+    db.commit()
+    return {"success": True, "message": "Citation deleted"}
+
+
 @router.post("/generate-bibtex", response_model=BibTeXExportResponse)
 def generate_bibtex(
     request: BibTeXExportRequest,

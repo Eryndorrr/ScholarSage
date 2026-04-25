@@ -96,20 +96,20 @@ export function AdminPage({ onBack }: AdminPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Header */}
-      <header className="bg-white border-b px-6 py-3">
+      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-3">
         <div className="flex items-center gap-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">返回</span>
           </button>
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-amber-600" />
-            <h1 className="text-lg font-bold text-gray-800">用户管理</h1>
+            <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">用户管理</h1>
           </div>
         </div>
       </header>
@@ -117,96 +117,96 @@ export function AdminPage({ onBack }: AdminPageProps) {
       {/* Content */}
       <div className="max-w-5xl mx-auto p-6">
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm rounded-lg">
             {error}
           </div>
         )}
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl p-4 border">
-            <div className="flex items-center gap-2 text-gray-500 mb-1">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border dark:border-gray-700">
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
               <Users className="w-4 h-4" />
               <span className="text-xs font-medium">总用户</span>
             </div>
-            <p className="text-2xl font-bold text-gray-800">{users.length}</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{users.length}</p>
           </div>
-          <div className="bg-white rounded-xl p-4 border">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border dark:border-gray-700">
             <div className="flex items-center gap-2 text-amber-500 mb-1">
               <Shield className="w-4 h-4" />
               <span className="text-xs font-medium">管理员</span>
             </div>
-            <p className="text-2xl font-bold text-gray-800">{users.filter(u => u.role === 'admin').length}</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{users.filter(u => u.role === 'admin').length}</p>
           </div>
-          <div className="bg-white rounded-xl p-4 border">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border dark:border-gray-700">
             <div className="flex items-center gap-2 text-green-500 mb-1">
               <UserCheck className="w-4 h-4" />
               <span className="text-xs font-medium">活跃用户</span>
             </div>
-            <p className="text-2xl font-bold text-gray-800">{users.filter(u => u.is_active).length}</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{users.filter(u => u.is_active).length}</p>
           </div>
         </div>
 
         {/* User Table */}
-        <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden">
           {loading ? (
-            <div className="text-center py-8 text-gray-500">加载中...</div>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">加载中...</div>
           ) : (
             <table className="w-full">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">用户名</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">邮箱</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">角色</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">状态</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">知识库</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">注册时间</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">操作</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">用户名</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">邮箱</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">角色</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">状态</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">知识库</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">注册时间</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">操作</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y dark:divide-gray-700">
                 {users.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-xs font-semibold text-blue-600">
+                        <div className="w-7 h-7 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
                             {user.username[0].toUpperCase()}
                           </span>
                         </div>
-                        <span className="text-sm font-medium text-gray-800">
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
                           {user.username}
                           {user.id === currentUser?.id && (
-                            <span className="ml-1 text-xs text-gray-400">(你)</span>
+                            <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">(你)</span>
                           )}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{user.email}</td>
                     <td className="px-4 py-3">
                       {user.role === 'admin' ? (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 rounded">
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">
                           管理员
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-600 rounded">
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
                           用户
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {user.is_active ? (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded">
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded">
                           活跃
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-red-100 text-red-700 rounded">
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">
                           禁用
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{user.collection_count}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{user.collection_count}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                       {new Date(user.created_at).toLocaleDateString('zh-CN')}
                     </td>
                     <td className="px-4 py-3">
@@ -215,7 +215,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
                         <button
                           onClick={() => handleToggleRole(user)}
                           disabled={user.id === currentUser?.id}
-                          className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                           title={user.role === 'admin' ? '降级为用户' : '升级为管理员'}
                         >
                           <Shield className="w-4 h-4" />
@@ -224,7 +224,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
                         {/* Reset password */}
                         <button
                           onClick={() => setResetPasswordUser(user)}
-                          className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded"
                           title="重置密码"
                         >
                           <KeyRound className="w-4 h-4" />
@@ -234,7 +234,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
                         <button
                           onClick={() => handleToggleActive(user)}
                           disabled={user.id === currentUser?.id}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                           title={user.is_active ? '禁用用户' : '启用用户'}
                         >
                           {user.is_active ? (
@@ -248,7 +248,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
                         <button
                           onClick={() => handleDelete(user)}
                           disabled={user.id === currentUser?.id}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                           title="删除用户"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -266,9 +266,9 @@ export function AdminPage({ onBack }: AdminPageProps) {
       {/* 重置密码弹窗 */}
       {resetPasswordUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold text-gray-800">重置密码</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">重置密码</h2>
               <button
                 onClick={() => {
                   setResetPasswordUser(null)
@@ -276,34 +276,34 @@ export function AdminPage({ onBack }: AdminPageProps) {
                   setResetError('')
                   setResetSuccess('')
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6">
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 为用户 <span className="font-semibold">{resetPasswordUser.username}</span> 设置新密码
               </p>
 
               {resetError && (
-                <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm">
                   {resetError}
                 </div>
               )}
               {resetSuccess && (
-                <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-lg text-sm">
+                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg text-sm">
                   {resetSuccess}
                 </div>
               )}
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">新密码</label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                   placeholder="至少 6 个字符"
                   minLength={6}
                 />

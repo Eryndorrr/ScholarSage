@@ -2,7 +2,7 @@ export interface Citation {
   id: string
   paper_id: string
   cited_title: string | null
-  cited_authors: string[]
+  cited_authors: string[] | null
   cited_year: number | null
   cited_venue: string | null
   location: string | null

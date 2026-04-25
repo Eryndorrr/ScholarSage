@@ -40,32 +40,32 @@ export function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 transition-colors">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <BookOpen className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">RAG 知识库</h1>
-          <p className="text-gray-500 mt-1 text-sm">企业级 RAG 知识库管理系统</p>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">RAG 知识库</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">企业级 RAG 知识库管理系统</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-6">
             {isLogin ? '登录' : '注册'}
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm rounded-lg">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">用户名</label>
               <input
                 type="text"
                 value={username}
@@ -73,28 +73,28 @@ export function AuthPage() {
                 required
                 minLength={3}
                 maxLength={50}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                 placeholder="输入用户名"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">邮箱</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   maxLength={255}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                   placeholder="输入邮箱"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">密码</label>
               <input
                 type="password"
                 value={password}
@@ -102,7 +102,7 @@ export function AuthPage() {
                 required
                 minLength={6}
                 maxLength={128}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                 placeholder="输入密码"
               />
             </div>
@@ -119,7 +119,7 @@ export function AuthPage() {
           <div className="mt-6 text-center">
             <button
               onClick={toggle}
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline"
             >
               {isLogin ? '没有账号？立即注册' : '已有账号？立即登录'}
             </button>

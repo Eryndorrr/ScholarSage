@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
 from app.database import get_db
 from app.models import Document, Collection, FileType, ProcessStatus, Paper
 from app.models.user import User
-from app.schemas import DocumentResponse, DuplicateCheckResponse
+from app.schemas import DocumentResponse, DuplicateCheckResponse, DocumentListResponse
 from app.core.rag.document_processor import DocumentProcessor
 from app.core.auth import get_current_user
 import os
@@ -13,6 +12,7 @@ import hashlib
 import logging
 
 logger = logging.getLogger(__name__)
+logger.info("=== documents.py module loaded ===")
 
 router = APIRouter(prefix="/api/collections/{collection_id}/documents", tags=["documents"])
 
@@ -36,19 +36,33 @@ def calculate_file_hash(content: bytes) -> str:
 def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType, document_title: str):
     """后台任务：处理文档"""
     from app.database import SessionLocal
+    import sys
+
+    # 后台任务中重新配置日志（确保在独立线程中也能正确输出）
+    task_logger = logging.getLogger('app.api.documents')
+    if not task_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        ))
+        task_logger.addHandler(handler)
+        task_logger.setLevel(logging.INFO)
+
+    task_logger.info(f"Starting background task for document: {document_id}")
 
     db = SessionLocal()
     try:
         # 更新状态为处理中
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
-            logger.error(f"Document {document_id} not found")
+            task_logger.error(f"Document {document_id} not found")
             return
 
         document.status = ProcessStatus.PROCESSING
         document.progress = 0
         db.commit()
-        logger.info(f"Processing document: {document.title} ({document_id})")
+        task_logger.info(f"Processing document: {document.title} ({document_id})")
 
         # 进度回调函数
         def update_progress(progress: int):
@@ -56,6 +70,7 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             if doc:
                 doc.progress = progress
                 db.commit()
+            task_logger.info(f"Document {document_id} progress: {progress}%")
 
         # 处理文档
         processor = DocumentProcessor()
@@ -74,15 +89,15 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             document.status = ProcessStatus.COMPLETED
             document.progress = 100
             document.chunk_count = result["chunk_count"]
-            logger.info(f"Document {document_id} processed successfully: {result['chunk_count']} chunks")
+            task_logger.info(f"Document {document_id} processed successfully: {result['chunk_count']} chunks")
         else:
             document.status = ProcessStatus.FAILED
             document.error_message = result.get("error", "Unknown error")
-            logger.error(f"Document {document_id} processing failed: {result.get('error')}")
+            task_logger.error(f"Document {document_id} processing failed: {result.get('error')}")
         db.commit()
 
     except Exception as e:
-        logger.exception(f"Error processing document {document_id}: {e}")
+        task_logger.exception(f"Error processing document {document_id}: {e}")
         # 更新失败状态
         document = db.query(Document).filter(Document.id == document_id).first()
         if document:
@@ -210,6 +225,7 @@ async def upload_document(
     db.refresh(document)
 
     # 后台处理文档（向量化）
+    logger.info(f"=== Queuing background task for document: {document.id}, file: {filename} ===")
     background_tasks.add_task(
         process_document_task,
         document.id,
@@ -218,21 +234,31 @@ async def upload_document(
         file_type,
         filename  # 传递文档标题
     )
+    logger.info(f"=== Background task queued successfully for document: {document.id} ===")
 
     return document
 
 
-@router.get("", response_model=List[DocumentResponse])
+@router.get("", response_model=DocumentListResponse)
 def list_documents(
     collection_id: str,
+    skip: int = 0,
+    limit: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取文档列表"""
+    """获取文档列表（支持分页）"""
     _verify_collection_owner(collection_id, current_user, db)
+
+    # 查询总数
+    total = db.query(Document).filter(
+        Document.collection_id == collection_id
+    ).count()
+
+    # 分页查询
     documents = db.query(Document).filter(
         Document.collection_id == collection_id
-    ).all()
+    ).order_by(Document.upload_time.desc()).offset(skip).limit(limit).all()
 
     # 检查每个文档是否有对应的论文记录
     doc_ids = [doc.id for doc in documents]
@@ -243,7 +269,15 @@ def list_documents(
     for doc in documents:
         doc.has_paper = doc.id in parsed_doc_ids
 
-    return documents
+    # 返回分页信息在 header 中
+    from fastapi import Response
+    return {
+        "documents": documents,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": skip + len(documents) < total
+    }
 
 
 @router.delete("/{document_id}")

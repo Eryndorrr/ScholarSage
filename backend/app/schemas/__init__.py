@@ -6,6 +6,7 @@ from app.schemas.collection import (
 from app.schemas.document import (
     DocumentCreate,
     DocumentResponse,
+    DocumentListResponse,
     SourceResponse,
     DuplicateCheckResponse
 )
@@ -45,7 +46,7 @@ from app.schemas.evaluation import (
 
 __all__ = [
     "CollectionCreate", "CollectionUpdate", "CollectionResponse",
-    "DocumentCreate", "DocumentResponse", "SourceResponse", "DuplicateCheckResponse",
+    "DocumentCreate", "DocumentResponse", "DocumentListResponse", "SourceResponse", "DuplicateCheckResponse",
     "QueryRequest", "QueryResponse", "WebSearchSource",
     "QueryHistoryCreate", "QueryHistoryResponse", "QueryHistoryListResponse",
     "PaperCreate", "PaperUpdate", "PaperResponse", "PaperListResponse", "PaperWithCitationsResponse",

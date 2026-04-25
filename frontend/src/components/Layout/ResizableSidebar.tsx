@@ -56,12 +56,12 @@ export function ResizableSidebar({
 
   if (isCollapsed) {
     return (
-      <aside className={`w-12 bg-white border-${side === 'left' ? 'r' : 'l'} flex flex-col ${className}`}>
+      <aside className={`w-12 bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col ${className}`}>
         {title && (
-          <div className="p-2 border-b flex items-center justify-center">
+          <div className="p-2 border-b dark:border-gray-700 flex items-center justify-center">
             <button
               onClick={toggleCollapse}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
               title="展开"
             >
               {side === 'left' ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -71,10 +71,10 @@ export function ResizableSidebar({
         <div className="flex-1 flex items-center justify-center">
           <button
             onClick={toggleCollapse}
-            className="p-2 hover:bg-gray-100 rounded transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             title="展开"
           >
-            {side === 'left' ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronLeft className="w-5 h-5 text-gray-400" />}
+            {side === 'left' ? <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500" /> : <ChevronLeft className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
           </button>
         </div>
       </aside>
@@ -85,7 +85,7 @@ export function ResizableSidebar({
     <aside
       ref={sidebarRef}
       style={{ width: `${width}px` }}
-      className={`relative bg-white border-${side === 'left' ? 'r' : 'l'} flex flex-col ${className}`}
+      className={`relative bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col ${className}`}
     >
       {children}
 
@@ -93,20 +93,20 @@ export function ResizableSidebar({
       {collapsible && (
         <button
           onClick={toggleCollapse}
-          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 bg-white border rounded-md shadow-sm hover:bg-gray-50 transition-colors ${
+          className={`absolute top-1/2 -translate-y-1/2 z-10 p-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors ${
             side === 'left' ? '-right-3' : '-left-3'
           }`}
           title="收起"
         >
-          {side === 'left' ? <ChevronLeft className="w-3 h-3 text-gray-400" /> : <ChevronRight className="w-3 h-3 text-gray-400" />}
+          {side === 'left' ? <ChevronLeft className="w-3 h-3 text-gray-400 dark:text-gray-500" /> : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
         </button>
       )}
 
       {/* 调整宽度手柄 */}
       <div
-        className={`absolute top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-200 transition-colors z-20 ${
+        className={`absolute top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors z-20 ${
           side === 'left' ? '-right-0.5' : '-left-0.5'
-        } ${isResizing ? 'bg-blue-400' : 'bg-transparent'}`}
+        } ${isResizing ? 'bg-blue-400 dark:bg-blue-500' : 'bg-transparent'}`}
         onMouseDown={handleMouseDown}
       />
     </aside>

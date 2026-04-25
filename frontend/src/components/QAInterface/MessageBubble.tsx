@@ -19,7 +19,7 @@ export function MessageBubble({ type, children, onCitationClick }: MessageBubble
         className={`max-w-[85%] px-4 py-3 rounded-2xl ${
           isUser
             ? 'bg-blue-500 text-white rounded-br-md'
-            : 'bg-gray-100 text-gray-800 rounded-bl-md'
+            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-md'
         }`}
       >
         <div className="text-sm leading-relaxed">

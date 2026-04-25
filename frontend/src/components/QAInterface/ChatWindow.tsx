@@ -217,8 +217,8 @@ export function ChatWindow({
     <div className="flex-1 flex flex-col h-full">
       {/* 顶部工具栏 */}
       {sessionTitle && (
-        <div className="border-b px-4 py-2 bg-white">
-          <div className="text-sm text-gray-500 truncate">
+        <div className="border-b dark:border-gray-700 px-4 py-2 bg-white dark:bg-gray-800">
+          <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
             {sessionTitle}
           </div>
         </div>
@@ -227,22 +227,22 @@ export function ChatWindow({
       {/* 消息区域 */}
       <div className="flex-1 overflow-y-auto p-6">
         {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-400">
+          <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">
             <div className="text-center max-w-md">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <p className="text-lg font-medium text-gray-500 mb-1">开始对话</p>
+              <p className="text-lg font-medium text-gray-500 dark:text-gray-400 mb-1">开始对话</p>
               <p className="text-sm">基于已上传的文档进行智能问答</p>
               {webSearchEnabled && (
-                <p className="text-xs text-blue-500 mt-2">
+                <p className="text-xs text-blue-500 dark:text-blue-400 mt-2">
                   🔍 联网检索已开启，将同时搜索网络资源
                 </p>
               )}
               {sessionTitle && (
-                <p className="text-xs text-gray-400 mt-2">当前对话：{sessionTitle}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">当前对话：{sessionTitle}</p>
               )}
             </div>
           </div>
@@ -254,11 +254,11 @@ export function ChatWindow({
                   {msg.content || (msg.isStreaming && (
                     <div className="flex items-center gap-2">
                       <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
-                      <span className="text-gray-500">
+                      <span className="text-gray-500 dark:text-gray-400">
                         {webSearchEnabled ? '搜索中...' : '思考中...'}
                       </span>
                     </div>
@@ -268,7 +268,7 @@ export function ChatWindow({
                 {/* 本地知识库来源 */}
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-3 mb-2">
-                    <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
                       参考来源
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -291,7 +291,7 @@ export function ChatWindow({
                   <div className="mt-3 mb-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Globe className="w-3.5 h-3.5 text-blue-500" />
-                      <span className="text-xs font-medium text-blue-600">网络搜索结果</span>
+                      <span className="text-xs font-medium text-blue-600 dark:text-blue-400">网络搜索结果</span>
                     </div>
                     <div className="space-y-1.5">
                       {msg.webSearchResults.map((result, sIdx) => {
@@ -305,27 +305,27 @@ export function ChatWindow({
                             id={`source-${webIndex}`}
                             className={`block p-2 rounded-lg text-sm transition-colors ${
                               highlightedCitation === webIndex
-                                ? 'bg-green-100 ring-2 ring-green-300'
-                                : 'bg-blue-50 hover:bg-blue-100'
+                                ? 'bg-green-100 dark:bg-green-900/50 ring-2 ring-green-300 dark:ring-green-600'
+                                : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
                             }`}
                           >
                             <div className="flex items-start gap-2">
                               <span className="flex-shrink-0 inline-flex items-center justify-center
                                              min-w-[24px] h-[24px] px-1
                                              text-xs font-mono font-medium rounded
-                                             bg-green-100 text-green-700">
+                                             bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300">
                                 W{sIdx + 1}
                               </span>
-                              <span className="text-blue-600 font-medium flex-1 truncate">
+                              <span className="text-blue-600 dark:text-blue-400 font-medium flex-1 truncate">
                                 {result.title}
                               </span>
                               {result.source && (
-                                <span className="text-xs text-gray-400 flex-shrink-0">
+                                <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
                                   {result.source}
                                 </span>
                               )}
                             </div>
-                            <p className="text-gray-600 text-xs mt-0.5 ml-8 line-clamp-2">
+                            <p className="text-gray-600 dark:text-gray-400 text-xs mt-0.5 ml-8 line-clamp-2">
                               {result.snippet}
                             </p>
                           </a>
@@ -343,7 +343,7 @@ export function ChatWindow({
       </div>
 
       {/* 输入区域 */}
-      <div className="border-t p-4 bg-gray-50">
+      <div className="border-t dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center gap-2">
             {/* 联网检索开关 */}
@@ -352,8 +352,8 @@ export function ChatWindow({
                 onClick={() => onToggleWebSearch(!webSearchEnabled)}
                 className={`flex-shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors border ${
                   webSearchEnabled
-                    ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
-                    : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                    : 'bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                 }`}
                 title={webSearchEnabled ? '联网检索已开启' : '联网检索已关闭'}
               >
@@ -378,7 +378,7 @@ export function ChatWindow({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={webSearchEnabled ? "输入问题，将搜索知识库和网络..." : "输入问题，按回车发送..."}
-                className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="w-full px-4 py-3 pr-12 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-800 dark:text-gray-200"
                 disabled={isLoading || !collectionId}
               />
               <button
@@ -388,7 +388,7 @@ export function ChatWindow({
                 className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
                   isLoading
                     ? 'text-white bg-red-500 hover:bg-red-600'
-                    : 'text-white bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed'
+                    : 'text-white bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed'
                 }`}
                 title={isLoading ? '停止生成' : '发送'}
               >
@@ -410,17 +410,17 @@ export function ChatWindow({
           onClick={() => setPreviewSource(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
               <div>
-                <h3 className="font-semibold text-gray-800">{previewSource.title}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">第 {previewSource.page} 页</p>
+                <h3 className="font-semibold text-gray-800 dark:text-gray-100">{previewSource.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">第 {previewSource.page} 页</p>
               </div>
               <button
                 onClick={() => setPreviewSource(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -428,21 +428,21 @@ export function ChatWindow({
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                  <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium rounded">
                     {(previewSource.relevance_score * 100).toFixed(0)}% 匹配
                   </span>
                 </div>
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
                   {previewSource.snippet}
                 </p>
               </div>
             </div>
-            <div className="p-4 border-t bg-gray-50 rounded-b-xl">
+            <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-b-xl">
               <button
                 onClick={() => setPreviewSource(null)}
-                className="w-full py-2 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors"
+                className="w-full py-2 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 text-sm font-medium transition-colors"
               >
                 关闭
               </button>

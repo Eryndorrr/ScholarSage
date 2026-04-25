@@ -5,6 +5,7 @@ import {
   Loader2, RefreshCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { getAuthHeaders } from '../../utils/authFetch'
 
 interface HealthDashboardProps {
   onBack: () => void
@@ -52,7 +53,7 @@ export function HealthDashboard({ onBack }: HealthDashboardProps) {
   useEffect(() => {
     const fetchOverview = async () => {
       try {
-        const res = await fetch('/api/dashboard/overview')
+        const res = await fetch('/api/dashboard/overview', { headers: getAuthHeaders() })
         if (res.ok) {
           const data = await res.json()
           setOverview(data)
@@ -77,7 +78,7 @@ export function HealthDashboard({ onBack }: HealthDashboardProps) {
   const loadHealth = async (collectionId: string) => {
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/dashboard/collection/${collectionId}`)
+      const res = await fetch(`/api/dashboard/collection/${collectionId}`, { headers: getAuthHeaders() })
       if (res.ok) {
         setHealthData(await res.json())
       }

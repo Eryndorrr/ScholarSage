@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from app.models.document import FileType, ProcessStatus
 
 
@@ -23,6 +23,7 @@ class DocumentResponse(DocumentBase):
     file_size: int
     file_hash: Optional[str] = None
     status: ProcessStatus
+    progress: int = 0  # 处理进度 0-100
     chunk_count: int
     error_message: Optional[str] = None
     has_paper: bool = False  # 是否已解析为论文
@@ -30,6 +31,15 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
+
+class DocumentListResponse(BaseModel):
+    """文档列表响应（分页）"""
+    documents: List[DocumentResponse]
+    total: int
+    skip: int
+    limit: int
+    has_more: bool
 
 
 class DuplicateCheckResponse(BaseModel):

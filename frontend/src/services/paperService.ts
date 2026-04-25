@@ -7,6 +7,7 @@ import type {
   PaperQueryParams,
 } from '../types/paper'
 import type {
+  Citation,
   CitationListResponse,
   BibTeXExportRequest,
   BibTeXExportResponse,
@@ -45,6 +46,23 @@ export const paperService = {
   async getCitations(paperId: string): Promise<CitationListResponse> {
     const response = await apiClient.get<CitationListResponse>(`${BASE_URL}/${paperId}/citations`)
     return response.data
+  },
+
+  // 添加参考文献
+  async addCitation(paperId: string, citation: Partial<Citation>): Promise<Citation> {
+    const response = await apiClient.post<Citation>(`${BASE_URL}/${paperId}/citations`, citation)
+    return response.data
+  },
+
+  // 更新参考文献
+  async updateCitation(citationId: string, citation: Partial<Citation>): Promise<Citation> {
+    const response = await apiClient.put<Citation>(`${BASE_URL}/citations/${citationId}`, citation)
+    return response.data
+  },
+
+  // 删除参考文献
+  async deleteCitation(citationId: string): Promise<void> {
+    await apiClient.delete(`${BASE_URL}/citations/${citationId}`)
   },
 
   // 生成BibTeX

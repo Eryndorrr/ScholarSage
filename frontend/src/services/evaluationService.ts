@@ -6,6 +6,7 @@ import type {
   EvaluationCreateRequest,
   EvaluationCompareResponse
 } from '../types/evaluation'
+import { getAuthHeaders } from '../utils/authFetch'
 
 const API_BASE = '/api/evaluation'
 
@@ -14,7 +15,10 @@ export const evaluationService = {
   async runEvaluation(request: EvaluationCreateRequest): Promise<Evaluation> {
     const response = await fetch(`${API_BASE}/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify(request)
     })
     if (!response.ok) {
@@ -26,7 +30,9 @@ export const evaluationService = {
 
   // 获取评估详情
   async getEvaluation(evaluationId: string): Promise<EvaluationDetail> {
-    const response = await fetch(`${API_BASE}/${evaluationId}`)
+    const response = await fetch(`${API_BASE}/${evaluationId}`, {
+      headers: getAuthHeaders(),
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch evaluation')
     }
@@ -47,7 +53,8 @@ export const evaluationService = {
     if (status) params.append('status', status)
 
     const response = await fetch(
-      `${API_BASE}/collection/${collectionId}?${params}`
+      `${API_BASE}/collection/${collectionId}?${params}`,
+      { headers: getAuthHeaders() }
     )
     if (!response.ok) {
       throw new Error('Failed to fetch evaluations')
@@ -58,7 +65,8 @@ export const evaluationService = {
   // 获取知识库评估统计
   async getStats(collectionId: string): Promise<EvaluationStats> {
     const response = await fetch(
-      `${API_BASE}/collection/${collectionId}/stats`
+      `${API_BASE}/collection/${collectionId}/stats`,
+      { headers: getAuthHeaders() }
     )
     if (!response.ok) {
       throw new Error('Failed to fetch evaluation stats')
@@ -72,7 +80,10 @@ export const evaluationService = {
   ): Promise<EvaluationCompareResponse> {
     const response = await fetch(`${API_BASE}/compare`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ evaluation_ids: evaluationIds })
     })
     if (!response.ok) {
@@ -84,7 +95,8 @@ export const evaluationService = {
   // 删除评估
   async deleteEvaluation(evaluationId: string): Promise<void> {
     const response = await fetch(`${API_BASE}/${evaluationId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders(),
     })
     if (!response.ok) {
       throw new Error('Failed to delete evaluation')

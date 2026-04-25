@@ -1,4 +1,5 @@
 import type { Document, FileType, DuplicateCheckResponse } from '../types/document'
+import { getAuthHeaders } from '../utils/authFetch'
 
 export interface UploadResponse {
   id: string
@@ -16,6 +17,7 @@ export const documentService = {
 
     const response = await fetch(`/api/collections/${collectionId}/documents/check-duplicate`, {
       method: 'POST',
+      headers: getAuthHeaders(),
       body: formData,
     })
 
@@ -35,6 +37,7 @@ export const documentService = {
 
     const response = await fetch(url, {
       method: 'POST',
+      headers: getAuthHeaders(),
       body: formData,
     })
 
@@ -54,7 +57,9 @@ export const documentService = {
   },
 
   async list(collectionId: string): Promise<Document[]> {
-    const response = await fetch(`/api/collections/${collectionId}/documents`)
+    const response = await fetch(`/api/collections/${collectionId}/documents`, {
+      headers: getAuthHeaders(),
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch documents')
     }
@@ -64,9 +69,21 @@ export const documentService = {
   async delete(collectionId: string, documentId: string): Promise<void> {
     const response = await fetch(`/api/collections/${collectionId}/documents/${documentId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     })
     if (!response.ok) {
       throw new Error('Failed to delete document')
     }
+  },
+
+  async getContent(collectionId: string, documentId: string): Promise<{ title: string; content: string; char_count: number }> {
+    const response = await fetch(`/api/collections/${collectionId}/documents/${documentId}/content`, {
+      headers: getAuthHeaders(),
+    })
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.detail || '获取文档内容失败')
+    }
+    return response.json()
   },
 }
