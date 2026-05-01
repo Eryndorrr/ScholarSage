@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   ChevronLeft, Activity, FileText, MessageSquare, BarChart3,
-  Database, Clock, TrendingUp, AlertTriangle, CheckCircle,
+  Database, TrendingUp, CheckCircle,
   Loader2, RefreshCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'

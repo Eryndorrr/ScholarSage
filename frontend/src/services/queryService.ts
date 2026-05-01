@@ -29,10 +29,12 @@ export const queryService = {
     const controller = new AbortController()
 
     // 使用 fetch 而不是 axios，因为 axios 对 SSE 支持不好
+    const token = localStorage.getItem('rag_access_token')
     fetch(`${API_BASE_URL}/api/query/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(request),
       signal: controller.signal,
