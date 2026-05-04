@@ -146,7 +146,10 @@ async def query_stream(
     summary = None
 
     if request.session_id:
-        session = db.query(Session).filter(Session.id == request.session_id).first()
+        session = db.query(Session).join(Collection).filter(
+            Session.id == request.session_id,
+            Collection.user_id == current_user.id,
+        ).first()
         if session:
             messages = db.query(SessionMessage).filter(
                 SessionMessage.session_id == session.id
@@ -345,7 +348,10 @@ async def query(
     summary = None
 
     if request.session_id:
-        session = db.query(Session).filter(Session.id == request.session_id).first()
+        session = db.query(Session).join(Collection).filter(
+            Session.id == request.session_id,
+            Collection.user_id == current_user.id,
+        ).first()
         if session:
             # 获取历史消息
             messages = db.query(SessionMessage).filter(

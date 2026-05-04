@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Document, Collection, FileType, ProcessStatus, Paper
@@ -7,6 +7,7 @@ from app.schemas import DocumentResponse, DuplicateCheckResponse, DocumentListRe
 from app.core.rag.document_processor import DocumentProcessor
 from app.core.auth import get_current_user
 import os
+import re
 import uuid
 import hashlib
 import logging
@@ -31,6 +32,32 @@ def _verify_collection_owner(collection_id: str, current_user: User, db: Session
 def calculate_file_hash(content: bytes) -> str:
     """计算文件的 SHA256 哈希值"""
     return hashlib.sha256(content).hexdigest()
+
+
+def _sanitize_filename(filename: str) -> str:
+    """清洗文件名，去除路径遍历和特殊字符"""
+    name = os.path.basename(filename or "untitled")
+    name = re.sub(r'[^\w一-鿿\-_. ]', '', name)
+    return name or "untitled"
+
+
+def _validate_file_size(size: int):
+    """校验文件大小是否超限"""
+    from app.config import settings as app_settings
+    if size > app_settings.max_upload_size:
+        max_mb = app_settings.max_upload_size // (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件大小超过限制（最大 {max_mb}MB）"
+        )
+
+
+def _ensure_safe_path(file_path: str):
+    """确保文件路径在 uploads 目录内（防止路径遍历）"""
+    uploads_dir = os.path.realpath("./uploads")
+    real_path = os.path.realpath(file_path)
+    if not real_path.startswith(uploads_dir + os.sep) and real_path != uploads_dir:
+        raise HTTPException(status_code=400, detail="非法文件路径")
 
 
 def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType, document_title: str):
@@ -124,6 +151,7 @@ async def check_duplicate(
 
     # 读取文件内容并计算哈希
     content = await file.read()
+    _validate_file_size(len(content))
     file_hash = calculate_file_hash(content)
 
     # 重置文件指针以便后续可能的读取
@@ -164,13 +192,14 @@ async def upload_document(
     """
     _verify_collection_owner(collection_id, current_user, db)
 
-    # 确定文件类型
-    filename = file.filename
-    if filename.endswith('.pdf'):
+    # 确定文件类型（大小写不敏感）
+    filename = file.filename or "untitled"
+    lower_name = filename.lower()
+    if lower_name.endswith('.pdf'):
         file_type = FileType.PDF
-    elif filename.endswith('.md'):
+    elif lower_name.endswith('.md'):
         file_type = FileType.MD
-    elif filename.endswith('.docx'):
+    elif lower_name.endswith('.docx'):
         file_type = FileType.DOCX
     else:
         raise HTTPException(status_code=400, detail="不支持的文件类型")
@@ -178,6 +207,7 @@ async def upload_document(
     # 读取文件内容
     content = await file.read()
     file_size = len(content)
+    _validate_file_size(file_size)
 
     # 计算文件哈希
     file_hash = calculate_file_hash(content)
@@ -203,9 +233,11 @@ async def upload_document(
             )
 
     # 保存文件
+    safe_filename = _sanitize_filename(filename)
     file_id = str(uuid.uuid4())
-    file_path = f"./uploads/{file_id}_{filename}"
+    file_path = f"./uploads/{file_id}_{safe_filename}"
     os.makedirs("./uploads", exist_ok=True)
+    _ensure_safe_path(file_path)
 
     with open(file_path, "wb") as buffer:
         buffer.write(content)
@@ -213,7 +245,7 @@ async def upload_document(
     # 创建文档记录
     document = Document(
         collection_id=collection_id,
-        title=filename,
+        title=safe_filename,
         file_path=file_path,
         file_type=file_type,
         file_size=file_size,
@@ -225,16 +257,49 @@ async def upload_document(
     db.refresh(document)
 
     # 后台处理文档（向量化）
-    logger.info(f"=== Queuing background task for document: {document.id}, file: {filename} ===")
-    background_tasks.add_task(
-        process_document_task,
-        document.id,
-        file_path,
-        collection_id,
-        file_type,
-        filename  # 传递文档标题
-    )
-    logger.info(f"=== Background task queued successfully for document: {document.id} ===")
+    from app.config import settings as app_settings
+
+    if app_settings.use_task_queue:
+        try:
+            from arq.connections import RedisSettings, create_pool
+
+            redis_settings = RedisSettings(
+                host=app_settings.redis_host,
+                port=app_settings.redis_port,
+                database=app_settings.redis_db,
+                password=app_settings.redis_password,
+            )
+            redis_pool = await create_pool(redis_settings)
+            await redis_pool.enqueue_job(
+                "process_document_task",
+                document.id,
+                file_path,
+                collection_id,
+                file_type.value,
+                filename,
+            )
+            await redis_pool.close()
+            logger.info(f"=== arq job enqueued for document: {document.id} ===")
+        except Exception as e:
+            logger.warning(f"Redis unavailable ({e}), falling back to BackgroundTasks")
+            background_tasks.add_task(
+                process_document_task,
+                document.id,
+                file_path,
+                collection_id,
+                file_type,
+                filename,
+            )
+    else:
+        logger.info(f"=== Queuing background task for document: {document.id} ===")
+        background_tasks.add_task(
+            process_document_task,
+            document.id,
+            file_path,
+            collection_id,
+            file_type,
+            filename,
+        )
 
     return document
 
@@ -380,7 +445,7 @@ def get_document_content(
         }
     except Exception as e:
         logger.error(f"Failed to read document content: {e}")
-        raise HTTPException(status_code=500, detail=f"读取文档失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="读取文档失败")
 
 
 from fastapi.responses import FileResponse, Response

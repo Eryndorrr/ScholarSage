@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from app.config import settings
+from app.rate_limit import limiter
 from app.database import engine, Base
 from app.api import collections, documents, query, sessions, papers, evaluation, knowledge_graph, benchmark, health_dashboard, auth, admin
 from app.core.monitoring import setup_monitoring
-import os
 import os
 import logging
 import logging.config
@@ -59,6 +62,14 @@ async def lifespan(app: FastAPI):
     # 启动时重新配置日志（覆盖 uvicorn 的设置）
     setup_logging()
     logger.info("Application started, logging configured")
+
+    # JWT Secret 安全检查
+    if settings.jwt_secret == "change-me-in-production-use-a-strong-random-string":
+        logger.warning(
+            "WARNING: JWT_SECRET is using the default value! "
+            "Set JWT_SECRET environment variable to a strong random string."
+        )
+
     yield
     # 关闭时清理
     logger.info("Application shutting down")
@@ -84,13 +95,60 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS配置
+# 速率限制
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# 安全头中间件
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# /metrics 端点保护（非 debug 模式需要 admin 认证）
+@app.middleware("http")
+async def metrics_auth_middleware(request: Request, call_next):
+    if request.url.path == "/metrics" and not settings.debug:
+        from jose import JWTError, jwt
+        from app.models.user import User
+        from app.database import SessionLocal
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
+
+        token = auth_header[7:]
+        try:
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            user_id = payload.get("sub")
+            if not user_id:
+                return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
+        except JWTError:
+            return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
+
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+            if not user or not user.is_admin:
+                return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
+        finally:
+            db.close()
+
+    return await call_next(request)
+
+# CORS配置（从 settings 读取）
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # 注册路由

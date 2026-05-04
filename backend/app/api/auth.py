@@ -4,7 +4,7 @@
 提供用户注册、登录、信息查询和密码管理接口
 """
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,12 +16,15 @@ from app.schemas.auth import (
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user
 )
+from app.rate_limit import limiter
+from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=TokenResponse)
-def register(data: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit(f"{settings.login_rate_limit_per_minute}/minute")
+def register(request: Request, data: UserRegister, db: Session = Depends(get_db)):
     """用户注册"""
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已被注册")
@@ -46,7 +49,8 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit(f"{settings.login_rate_limit_per_minute}/minute")
+def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     """用户登录"""
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.hashed_password):

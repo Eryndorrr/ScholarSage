@@ -69,6 +69,21 @@ class Settings(BaseSettings):
     query_expansion_keywords: bool = True  # 关键词提取：增强 BM25 检索
     query_expansion_synonyms: bool = True  # 同义词扩展：扩大检索覆盖面
 
+    # Redis / 任务队列配置
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: Optional[str] = None
+    task_max_retries: int = 3  # 文档处理最大重试次数
+    task_retry_delay: int = 30  # 重试间隔（秒）
+    use_task_queue: bool = True  # 是否使用 arq 任务队列（False 则回退到 BackgroundTasks）
+
+    # 安全配置
+    max_upload_size: int = 100 * 1024 * 1024  # 最大上传文件大小（100MB）
+    cors_origins: str = "http://localhost:5173,http://localhost:3000"  # 逗号分隔的 CORS 源
+    rate_limit_per_minute: int = 60  # 全局 API 速率限制
+    login_rate_limit_per_minute: int = 10  # 登录接口速率限制
+
     # JWT 认证配置
     jwt_secret: str = "change-me-in-production-use-a-strong-random-string"
     jwt_algorithm: str = "HS256"

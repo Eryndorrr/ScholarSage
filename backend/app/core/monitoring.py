@@ -253,7 +253,7 @@ def setup_monitoring(app):
         excluded_handlers=["/metrics", "/health"]
     )
     instrumentator.instrument(app)
-    instrumentator.expose(app, endpoint="/metrics", include_in_schema=True)
+    instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
 
     # OpenTelemetry 追踪
     setup_tracing()

@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
@@ -9,9 +23,32 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DATABASE_URL=sqlite:///./data/knowledge.db
       - CHROMA_PERSIST_DIR=/app/data/chroma
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - USE_TASK_QUEUE=true
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: ./backend
+    command: arq app.worker.WorkerSettings
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=sqlite:///./data/knowledge.db
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -23,3 +60,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  redis_data:
