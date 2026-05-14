@@ -1,11 +1,33 @@
+import json
 import logging
 import sys
 
+import redis as redis_sync
 from arq.connections import RedisSettings
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def publish_sync(document_id: str, message: dict):
+    """同步发布状态到 Redis
+
+    Args:
+        document_id: 文档 ID
+        message: 要发布的消息字典
+    """
+    try:
+        sync_client = redis_sync.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password,
+        )
+        sync_client.publish(f"doc_status:{document_id}", json.dumps(message))
+        sync_client.close()
+    except Exception as e:
+        logger.warning(f"Failed to publish status: {e}")
 
 
 async def process_document_task(
@@ -34,11 +56,22 @@ async def process_document_task(
 
     task_logger.info(f"arq: Processing document {document_id}")
 
+    # 发布处理开始状态
+    publish_sync(document_id, {
+        "status": "processing",
+        "progress": 0,
+        "stage": "initializing",
+    })
+
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
             task_logger.error(f"Document {document_id} not found")
+            publish_sync(document_id, {
+                "status": "failed",
+                "error": "Document not found",
+            })
             return
 
         document.status = ProcessStatus.PROCESSING
@@ -51,6 +84,12 @@ async def process_document_task(
                 doc.progress = progress
                 db.commit()
             task_logger.info(f"Document {document_id} progress: {progress}%")
+            # 发布进度更新到 Redis
+            publish_sync(document_id, {
+                "status": "processing",
+                "progress": progress,
+                "stage": "processing",
+            })
 
         file_type_enum = FileType(file_type)
 
@@ -72,12 +111,22 @@ async def process_document_task(
             task_logger.info(
                 f"Document {document_id} processed: {result['chunk_count']} chunks"
             )
+            # 发布处理完成状态
+            publish_sync(document_id, {
+                "status": "completed",
+                "chunk_count": result["chunk_count"],
+            })
         else:
             document.status = ProcessStatus.FAILED
             document.error_message = result.get("error", "Unknown error")
             task_logger.error(
                 f"Document {document_id} failed: {result.get('error')}"
             )
+            # 发布处理失败状态
+            publish_sync(document_id, {
+                "status": "failed",
+                "error": result.get("error", "Unknown error"),
+            })
         db.commit()
 
     except Exception as e:
@@ -87,6 +136,11 @@ async def process_document_task(
             document.status = ProcessStatus.FAILED
             document.error_message = str(e)
             db.commit()
+        # 发布处理异常失败状态
+        publish_sync(document_id, {
+            "status": "failed",
+            "error": str(e),
+        })
         raise  # 让 arq 处理重试
     finally:
         db.close()
