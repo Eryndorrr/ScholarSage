@@ -18,8 +18,8 @@ import { AdminPage } from './components/Admin/AdminPage'
 import { Pagination } from './components/common/Pagination'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
-import { useState, useEffect, useRef } from 'react'
-import type { Document } from './types/document'
+import { useState, useEffect } from 'react'
+import type { Document, ProcessStatus } from './types/document'
 import type { Session, SessionMessage } from './types/session'
 import { sessionService } from './services/sessionService'
 import { apiClient } from './services/api'
@@ -77,7 +77,8 @@ function MainApp() {
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([])
 
-  const pollingRef = useRef<number | null>(null)
+  // SSE 状态管理
+  const [watchingDocId, setWatchingDocId] = useState<string | null>(null)
 
   // 加载文档列表 (使用 apiClient，支持分页)
   const fetchDocuments = async (page: number = 1) => {
@@ -210,42 +211,34 @@ function MainApp() {
     fetchSessions()
   }, [selectedCollection])
 
-  // 轮询
-  useEffect(() => {
-    if (!selectedCollection) {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-      return
-    }
-
-    const hasProcessingDocs = documents.some(
-      doc => doc.status === 'pending' || doc.status === 'processing'
-    )
-
-    if (hasProcessingDocs && !pollingRef.current) {
-      pollingRef.current = window.setInterval(() => {
-        fetchDocuments()
-      }, 2000)
-    } else if (!hasProcessingDocs && pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-    }
-  }, [selectedCollection, documents])
-
-  const handleUploadComplete = async () => {
+  const handleUploadComplete = async (newDocId?: string) => {
     // 上传后刷新到第一页
     const data = await fetchDocuments(1)
     if (data) {
       setDocuments(data)
+      if (newDocId) {
+        setWatchingDocId(newDocId)
+      }
+    }
+  }
+
+  // SSE 状态更新回调
+  const handleStatusUpdate = (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number }) => {
+    setDocuments(prev => prev.map(doc => {
+      if (doc.id === docId) {
+        return {
+          ...doc,
+          status: status.status,
+          progress: status.progress ?? doc.progress,
+          chunk_count: status.chunk_count ?? doc.chunk_count,
+        }
+      }
+      return doc
+    }))
+
+    if (status.status === 'completed' || status.status === 'failed') {
+      fetchDocuments(1)
+      setWatchingDocId(null)
     }
   }
 
@@ -382,6 +375,8 @@ function MainApp() {
                               onDelete={handleDeleteDocument}
                               onPreview={setPreviewDocument}
                               onRefresh={() => fetchDocuments(docCurrentPage)}
+                              onStatusUpdate={handleStatusUpdate}
+                              watchingDocId={watchingDocId}
                             />
                             <Pagination
                               currentPage={docCurrentPage}
