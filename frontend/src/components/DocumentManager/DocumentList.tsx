@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { FileText, Trash2, Loader2, CheckCircle, XCircle, Clock, Eye, BookOpen, ChevronDown, Zap, Brain, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { Document } from '../../types/document'
+import type { Document, ProcessStatus } from '../../types/document'
 import { paperService } from '../../services/paperService'
+import { useDocumentStatus } from '../../hooks/useDocumentStatus'
 
 interface DocumentListProps {
   documents: Document[]
@@ -10,24 +11,49 @@ interface DocumentListProps {
   onDelete: (documentId: string) => void
   onPreview: (document: Document) => void
   onRefresh?: () => void  // 刷新文档列表的回调
+  onStatusUpdate?: (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number }) => void
+  watchingDocId?: string | null
 }
 
-export function DocumentList({ documents, onDelete, onPreview, onRefresh }: DocumentListProps) {
+export function DocumentList({ documents, collectionId, onDelete, onPreview, onRefresh, onStatusUpdate, watchingDocId }: DocumentListProps) {
   const [parsingDocs, setParsingDocs] = useState<Set<string>>(new Set())
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
+  // SSE 实时状态订阅
+  const liveStatus = useDocumentStatus(watchingDocId ?? null, collectionId, (status) => {
+    if (watchingDocId && onStatusUpdate) {
+      onStatusUpdate(watchingDocId, status)
+    }
+  })
+
+  // 合并实时状态到文档列表
+  const documentsWithStatus = useMemo(() => {
+    return documents.map(doc => {
+      if (doc.id === watchingDocId && liveStatus) {
+        return {
+          ...doc,
+          status: liveStatus.status as ProcessStatus,
+          progress: liveStatus.progress ?? doc.progress,
+          chunk_count: liveStatus.chunk_count ?? doc.chunk_count,
+          error_message: liveStatus.error ?? doc.error_message,
+        }
+      }
+      return doc
+    })
+  }, [documents, watchingDocId, liveStatus])
+
   // 前端过滤
   const filteredDocuments = useMemo(() =>
-    documents.filter(d =>
+    documentsWithStatus.filter(d =>
       d.title.toLowerCase().includes(searchQuery.toLowerCase())
     ),
-    [documents, searchQuery]
+    [documentsWithStatus, searchQuery]
   )
 
-  // 从 documents 中获取已解析状态
+  // 从 documentsWithStatus 中获取已解析状态
   const isParsed = (docId: string) => {
-    const doc = documents.find(d => d.id === docId)
+    const doc = documentsWithStatus.find(d => d.id === docId)
     return doc?.has_paper || false
   }
 
@@ -86,7 +112,7 @@ export function DocumentList({ documents, onDelete, onPreview, onRefresh }: Docu
     }
   }
 
-  if (documents.length === 0) {
+  if (documentsWithStatus.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400 text-sm">
         暂无文档
