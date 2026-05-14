@@ -211,13 +211,14 @@ function MainApp() {
     fetchSessions()
   }, [selectedCollection])
 
-  const handleUploadComplete = async (newDocId?: string) => {
+  const handleUploadComplete = async (newDocIds?: string[]) => {
     // 上传后刷新到第一页
     const data = await fetchDocuments(1)
     if (data) {
       setDocuments(data)
-      if (newDocId) {
-        setWatchingDocId(newDocId)
+      // 监听第一个上传的文档
+      if (newDocIds && newDocIds.length > 0) {
+        setWatchingDocId(newDocIds[0])
       }
     }
   }

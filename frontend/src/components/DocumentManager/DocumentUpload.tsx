@@ -8,11 +8,12 @@ interface UploadFile {
   status: 'pending' | 'checking' | 'duplicate' | 'uploading' | 'submitted' | 'success' | 'error'
   error?: string
   existingDocument?: Document
+  uploadedDocId?: string  // 上传成功后返回的文档 ID
 }
 
 interface DocumentUploadProps {
   collectionId: string
-  onUploadComplete: () => void
+  onUploadComplete: (newDocIds?: string[]) => void
 }
 
 export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploadProps) {
@@ -121,10 +122,10 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
     ))
 
     try {
-      await documentService.upload(collectionId, uploadFile.file, forceUpload)
+      const result = await documentService.upload(collectionId, uploadFile.file, forceUpload)
 
       setUploadFiles(prev => prev.map((f, idx) =>
-        idx === index ? { ...f, status: 'submitted' as const } : f
+        idx === index ? { ...f, status: 'submitted' as const, uploadedDocId: result.id } : f
       ))
     } catch (err: any) {
       if (err.isDuplicate) {
@@ -171,10 +172,11 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
 
     setIsUploading(false)
 
-    // 上传完成后刷新列表，让轮询机制接管状态更新
-    const submittedCount = uploadFiles.filter(f => f.status === 'submitted').length
-    if (submittedCount > 0) {
-      onUploadComplete()
+    // 上传完成后刷新列表，传递新文档 ID 用于 SSE 监听
+    const submittedFiles = uploadFiles.filter(f => f.status === 'submitted')
+    if (submittedFiles.length > 0) {
+      const newDocIds = submittedFiles.map(f => f.uploadedDocId).filter(Boolean) as string[]
+      onUploadComplete(newDocIds)
     }
   }
 
