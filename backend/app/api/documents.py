@@ -527,6 +527,8 @@ async def document_status_stream(
         raise HTTPException(status_code=404, detail="文档不存在")
 
     async def event_generator():
+        redis = None
+        pubsub = None
         try:
             # 连接 Redis
             redis = await aioredis.from_url(
@@ -541,36 +543,43 @@ async def document_status_stream(
             if document.status in [ProcessStatus.COMPLETED, ProcessStatus.FAILED]:
                 message = _build_status_message(document)
                 yield f"data: {json.dumps(message)}\n\n"
-                await redis.close()
                 return
 
             # 订阅 Redis 频道
             pubsub = redis.pubsub()
             await pubsub.subscribe(channel)
 
-            try:
-                async for message in pubsub.listen():
-                    if message["type"] == "message":
-                        data = message["data"]
-                        if isinstance(data, bytes):
-                            data = data.decode("utf-8")
-                        yield f"data: {data}\n\n"
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    data = message["data"]
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    yield f"data: {data}\n\n"
 
-                        # 解析检查是否完成
-                        try:
-                            parsed = json.loads(data)
-                            if parsed.get("status") in ["completed", "failed"]:
-                                break
-                        except json.JSONDecodeError:
-                            pass
-            finally:
-                await pubsub.unsubscribe(channel)
-                await pubsub.close()
-                await redis.close()
+                    # 解析检查是否完成
+                    try:
+                        parsed = json.loads(data)
+                        if parsed.get("status") in ["completed", "failed"]:
+                            break
+                    except json.JSONDecodeError:
+                        pass
 
         except Exception as e:
             logger.error(f"SSE error for document {document_id}: {e}")
             yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # 确保所有资源都被正确关闭
+            if pubsub:
+                try:
+                    await pubsub.unsubscribe()
+                    await pubsub.close()
+                except Exception:
+                    pass
+            if redis:
+                try:
+                    await redis.close()
+                except Exception:
+                    pass
 
     return StreamingResponse(
         event_generator(),
