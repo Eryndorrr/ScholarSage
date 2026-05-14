@@ -486,3 +486,110 @@ def get_document_file(
             "Content-Length": str(len(content))
         }
     )
+
+
+# === SSE 状态流端点 ===
+from fastapi.responses import StreamingResponse
+import json
+from redis import asyncio as aioredis
+
+
+@router.get("/{document_id}/status/stream")
+async def document_status_stream(
+    collection_id: str,
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    SSE 流式返回文档处理状态
+
+    消息格式:
+    - processing: {"status": "processing", "progress": 50, "stage": "embedding"}
+    - completed: {"status": "completed", "chunk_count": 42}
+    - failed: {"status": "failed", "error": "..."}
+    """
+    from app.config import settings as app_settings
+
+    # 验证 ownership
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.user_id == current_user.id
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.collection_id == collection_id
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    async def event_generator():
+        try:
+            # 连接 Redis
+            redis = await aioredis.from_url(
+                f"redis://{app_settings.redis_host}:{app_settings.redis_port}",
+                password=app_settings.redis_password,
+                db=app_settings.redis_db,
+            )
+            channel = f"doc_status:{document_id}"
+
+            # 检查当前状态，如果已完成直接返回
+            db.refresh(document)
+            if document.status in [ProcessStatus.COMPLETED, ProcessStatus.FAILED]:
+                message = _build_status_message(document)
+                yield f"data: {json.dumps(message)}\n\n"
+                await redis.close()
+                return
+
+            # 订阅 Redis 频道
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(channel)
+
+            try:
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        data = message["data"]
+                        if isinstance(data, bytes):
+                            data = data.decode("utf-8")
+                        yield f"data: {data}\n\n"
+
+                        # 解析检查是否完成
+                        try:
+                            parsed = json.loads(data)
+                            if parsed.get("status") in ["completed", "failed"]:
+                                break
+                        except json.JSONDecodeError:
+                            pass
+            finally:
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+                await redis.close()
+
+        except Exception as e:
+            logger.error(f"SSE error for document {document_id}: {e}")
+            yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+def _build_status_message(doc: Document) -> dict:
+    """构建状态消息"""
+    if doc.status == ProcessStatus.COMPLETED:
+        return {"status": "completed", "chunk_count": doc.chunk_count}
+    elif doc.status == ProcessStatus.FAILED:
+        return {"status": "failed", "error": doc.error_message}
+    elif doc.status == ProcessStatus.PROCESSING:
+        return {"status": "processing", "progress": doc.progress or 0}
+    else:
+        return {"status": "pending"}
