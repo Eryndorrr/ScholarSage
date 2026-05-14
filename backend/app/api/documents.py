@@ -60,6 +60,25 @@ def _ensure_safe_path(file_path: str):
         raise HTTPException(status_code=400, detail="非法文件路径")
 
 
+def _publish_status_sync(document_id: str, message: dict):
+    """同步发布状态到 Redis（用于 BackgroundTasks）"""
+    import json
+    import redis as redis_sync
+    from app.config import settings as app_settings
+
+    try:
+        client = redis_sync.Redis(
+            host=app_settings.redis_host,
+            port=app_settings.redis_port,
+            db=app_settings.redis_db,
+            password=app_settings.redis_password,
+        )
+        client.publish(f"doc_status:{document_id}", json.dumps(message))
+        client.close()
+    except Exception as e:
+        logger.warning(f"Failed to publish status: {e}")
+
+
 def process_document_task(document_id: str, file_path: str, collection_id: str, file_type: FileType, document_title: str):
     """后台任务：处理文档"""
     from app.database import SessionLocal
@@ -78,12 +97,23 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
 
     task_logger.info(f"Starting background task for document: {document_id}")
 
+    # 发布处理开始状态
+    _publish_status_sync(document_id, {
+        "status": "processing",
+        "progress": 0,
+        "stage": "initializing",
+    })
+
     db = SessionLocal()
     try:
         # 更新状态为处理中
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
             task_logger.error(f"Document {document_id} not found")
+            _publish_status_sync(document_id, {
+                "status": "failed",
+                "error": "Document not found",
+            })
             return
 
         document.status = ProcessStatus.PROCESSING
@@ -98,6 +128,12 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
                 doc.progress = progress
                 db.commit()
             task_logger.info(f"Document {document_id} progress: {progress}%")
+            # 发布进度更新
+            _publish_status_sync(document_id, {
+                "status": "processing",
+                "progress": progress,
+                "stage": "processing",
+            })
 
         # 处理文档
         processor = DocumentProcessor()
@@ -116,12 +152,23 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             document.status = ProcessStatus.COMPLETED
             document.progress = 100
             document.chunk_count = result["chunk_count"]
+            db.commit()
             task_logger.info(f"Document {document_id} processed successfully: {result['chunk_count']} chunks")
+            # 发布完成状态
+            _publish_status_sync(document_id, {
+                "status": "completed",
+                "chunk_count": result["chunk_count"],
+            })
         else:
             document.status = ProcessStatus.FAILED
             document.error_message = result.get("error", "Unknown error")
+            db.commit()
             task_logger.error(f"Document {document_id} processing failed: {result.get('error')}")
-        db.commit()
+            # 发布失败状态
+            _publish_status_sync(document_id, {
+                "status": "failed",
+                "error": result.get("error", "Unknown error"),
+            })
 
     except Exception as e:
         task_logger.exception(f"Error processing document {document_id}: {e}")
@@ -131,6 +178,11 @@ def process_document_task(document_id: str, file_path: str, collection_id: str, 
             document.status = ProcessStatus.FAILED
             document.error_message = str(e)
             db.commit()
+        # 发布异常失败状态
+        _publish_status_sync(document_id, {
+            "status": "failed",
+            "error": str(e),
+        })
     finally:
         db.close()
 
