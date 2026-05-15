@@ -18,7 +18,7 @@ import { AdminPage } from './components/Admin/AdminPage'
 import { Pagination } from './components/common/Pagination'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Document, ProcessStatus } from './types/document'
 import type { Session, SessionMessage } from './types/session'
 import { sessionService } from './services/sessionService'
@@ -78,7 +78,13 @@ function MainApp() {
   const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([])
 
   // SSE 状态管理
-  const [watchingDocId, setWatchingDocId] = useState<string | null>(null)
+  const [watchingDocIds, setWatchingDocIds] = useState<string[]>([])
+
+  const addWatchingDocIds = useCallback((docIds: string[]) => {
+    if (docIds.length === 0) return
+
+    setWatchingDocIds(prev => Array.from(new Set([...prev, ...docIds])))
+  }, [])
 
   // 加载文档列表 (使用 apiClient，支持分页)
   const fetchDocuments = async (page: number = 1) => {
@@ -91,6 +97,11 @@ function MainApp() {
       setDocuments(response.data.documents)
       setDocTotal(response.data.total)
       setDocCurrentPage(page)
+      addWatchingDocIds(
+        response.data.documents
+          .filter((doc: Document) => doc.status === 'pending' || doc.status === 'processing')
+          .map((doc: Document) => doc.id)
+      )
       return response.data.documents
     } catch (error) {
       console.error('Failed to fetch documents:', error)
@@ -200,12 +211,14 @@ function MainApp() {
       setSessionSearchQuery('') // 清空对话搜索
       setDocCurrentPage(1)
       setDocTotal(0)
+      setWatchingDocIds([])
       return
     }
 
     // 切换知识库时清空搜索
     setSessionSearchQuery('')
     setDocCurrentPage(1)
+    setWatchingDocIds([])
     setIsLoadingDocs(true)
     fetchDocuments(1).finally(() => setIsLoadingDocs(false))
     fetchSessions()
@@ -216,15 +229,15 @@ function MainApp() {
     const data = await fetchDocuments(1)
     if (data) {
       setDocuments(data)
-      // 监听第一个上传的文档
+      // 监听本轮上传的文档
       if (newDocIds && newDocIds.length > 0) {
-        setWatchingDocId(newDocIds[0])
+        addWatchingDocIds(newDocIds)
       }
     }
   }
 
   // SSE 状态更新回调
-  const handleStatusUpdate = (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number }) => {
+  const handleStatusUpdate = (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number; error?: string }) => {
     setDocuments(prev => prev.map(doc => {
       if (doc.id === docId) {
         return {
@@ -232,6 +245,7 @@ function MainApp() {
           status: status.status,
           progress: status.progress ?? doc.progress,
           chunk_count: status.chunk_count ?? doc.chunk_count,
+          error_message: status.error ?? doc.error_message,
         }
       }
       return doc
@@ -239,7 +253,7 @@ function MainApp() {
 
     if (status.status === 'completed' || status.status === 'failed') {
       fetchDocuments(1)
-      setWatchingDocId(null)
+      setWatchingDocIds(prev => prev.filter(id => id !== docId))
     }
   }
 
@@ -377,7 +391,7 @@ function MainApp() {
                               onPreview={setPreviewDocument}
                               onRefresh={() => fetchDocuments(docCurrentPage)}
                               onStatusUpdate={handleStatusUpdate}
-                              watchingDocId={watchingDocId}
+                              watchingDocIds={watchingDocIds}
                             />
                             <Pagination
                               currentPage={docCurrentPage}

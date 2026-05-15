@@ -542,8 +542,28 @@ def get_document_file(
 
 # === SSE 状态流端点 ===
 from fastapi.responses import StreamingResponse
+import asyncio
 import json
 from redis import asyncio as aioredis
+
+
+@router.get("/{document_id}/status")
+def get_document_status(
+    collection_id: str,
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回文档当前处理状态，用于状态流兜底轮询。"""
+    _verify_collection_owner(collection_id, current_user, db)
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.collection_id == collection_id
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    return _build_status_message(document)
 
 
 @router.get("/{document_id}/status/stream")
@@ -581,28 +601,65 @@ async def document_status_stream(
     async def event_generator():
         redis = None
         pubsub = None
-        try:
-            # 连接 Redis
-            redis = await aioredis.from_url(
-                f"redis://{app_settings.redis_host}:{app_settings.redis_port}",
-                password=app_settings.redis_password,
-                db=app_settings.redis_db,
-            )
-            channel = f"doc_status:{document_id}"
+        last_payload = None
 
-            # 检查当前状态，如果已完成直接返回
-            db.refresh(document)
-            if document.status in [ProcessStatus.COMPLETED, ProcessStatus.FAILED]:
-                message = _build_status_message(document)
-                yield f"data: {json.dumps(message)}\n\n"
+        def load_current_status() -> dict:
+            db.expire_all()
+            current_document = db.query(Document).filter(
+                Document.id == document_id,
+                Document.collection_id == collection_id
+            ).first()
+            if not current_document:
+                return {"status": "failed", "error": "文档不存在"}
+            return _build_status_message(current_document)
+
+        def encode_event(payload: dict) -> str:
+            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        async def poll_database_until_terminal():
+            nonlocal last_payload
+            while True:
+                payload = load_current_status()
+                payload_text = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+                if payload_text != last_payload:
+                    last_payload = payload_text
+                    yield encode_event(payload)
+
+                if payload.get("status") in ["completed", "failed"]:
+                    return
+
+                await asyncio.sleep(2)
+
+        try:
+            # 先发送数据库里的当前状态，避免错过已发布的 Pub/Sub 消息。
+            current_status = load_current_status()
+            last_payload = json.dumps(current_status, sort_keys=True, ensure_ascii=False)
+            yield encode_event(current_status)
+            if current_status.get("status") in ["completed", "failed"]:
                 return
 
-            # 订阅 Redis 频道
-            pubsub = redis.pubsub()
-            await pubsub.subscribe(channel)
+            try:
+                # Redis Pub/Sub 提供低延迟进度；DB 轮询负责兜底纠偏。
+                redis = await aioredis.from_url(
+                    f"redis://{app_settings.redis_host}:{app_settings.redis_port}",
+                    password=app_settings.redis_password,
+                    db=app_settings.redis_db,
+                )
+                channel = f"doc_status:{document_id}"
+                pubsub = redis.pubsub()
+                await pubsub.subscribe(channel)
+            except Exception as e:
+                logger.warning(f"Redis unavailable for document status stream, using DB polling: {e}")
+                async for event in poll_database_until_terminal():
+                    yield event
+                return
 
-            async for message in pubsub.listen():
-                if message["type"] == "message":
+            next_db_check = asyncio.get_running_loop().time() + 2
+
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+
+                if message and message["type"] == "message":
                     data = message["data"]
                     if isinstance(data, bytes):
                         data = data.decode("utf-8")
@@ -616,9 +673,22 @@ async def document_status_stream(
                     except json.JSONDecodeError:
                         pass
 
+                now = asyncio.get_running_loop().time()
+                if now >= next_db_check:
+                    current_status = load_current_status()
+                    payload_text = json.dumps(current_status, sort_keys=True, ensure_ascii=False)
+                    if payload_text != last_payload:
+                        last_payload = payload_text
+                        yield encode_event(current_status)
+
+                    if current_status.get("status") in ["completed", "failed"]:
+                        break
+                    next_db_check = now + 2
+
         except Exception as e:
             logger.error(f"SSE error for document {document_id}: {e}")
-            yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+            async for event in poll_database_until_terminal():
+                yield event
         finally:
             # 确保所有资源都被正确关闭
             if pubsub:

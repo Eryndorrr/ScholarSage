@@ -16,6 +16,11 @@ interface DocumentUploadProps {
   onUploadComplete: (newDocIds?: string[]) => void
 }
 
+type UploadError = Error & {
+  isDuplicate?: boolean
+  existingDocument?: Document
+}
+
 export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploadProps) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -83,7 +88,7 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
     processFiles(files)
   }
 
-  const checkDuplicate = async (index: number) => {
+  const checkDuplicate = async (index: number): Promise<boolean> => {
     const uploadFile = uploadFiles[index]
 
     setUploadFiles(prev => prev.map((f, idx) =>
@@ -101,20 +106,23 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
             existingDocument: result.existing_document!
           } : f
         ))
+        return true
       } else {
         setUploadFiles(prev => prev.map((f, idx) =>
           idx === index ? { ...f, status: 'pending' as const, existingDocument: undefined } : f
         ))
+        return false
       }
-    } catch (err) {
+    } catch {
       // 检查失败时继续上传
       setUploadFiles(prev => prev.map((f, idx) =>
         idx === index ? { ...f, status: 'pending' as const } : f
       ))
+      return false
     }
   }
 
-  const uploadSingleFile = async (index: number, forceUpload: boolean = false) => {
+  const uploadSingleFile = async (index: number, forceUpload: boolean = false): Promise<string | null> => {
     const uploadFile = uploadFiles[index]
 
     setUploadFiles(prev => prev.map((f, idx) =>
@@ -127,21 +135,24 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
       setUploadFiles(prev => prev.map((f, idx) =>
         idx === index ? { ...f, status: 'submitted' as const, uploadedDocId: result.id } : f
       ))
-    } catch (err: any) {
-      if (err.isDuplicate) {
+      return result.id
+    } catch (err: unknown) {
+      const uploadError = err as UploadError
+      if (uploadError.isDuplicate) {
         setUploadFiles(prev => prev.map((f, idx) =>
           idx === index ? {
             ...f,
             status: 'duplicate' as const,
-            error: err.message,
-            existingDocument: err.existingDocument
+            error: uploadError.message,
+            existingDocument: uploadError.existingDocument
           } : f
         ))
       } else {
         setUploadFiles(prev => prev.map((f, idx) =>
-          idx === index ? { ...f, status: 'error' as const, error: err.message || '上传失败' } : f
+          idx === index ? { ...f, status: 'error' as const, error: uploadError.message || '上传失败' } : f
         ))
       }
+      return null
     }
   }
 
@@ -150,39 +161,37 @@ export function DocumentUpload({ collectionId, onUploadComplete }: DocumentUploa
 
     setIsUploading(true)
 
-    // 先检查所有待上传文件的重复情况
+    const newDocIds: string[] = []
+
+    // 逐个检查并上传，避免依赖 React 异步 state 判断本轮上传结果
     const pendingIndices = uploadFiles
       .map((f, idx) => ({ f, idx }))
       .filter(({ f }) => f.status === 'pending')
       .map(({ idx }) => idx)
 
     for (const idx of pendingIndices) {
-      await checkDuplicate(idx)
-    }
-
-    // 上传非重复的文件
-    const toUploadIndices = uploadFiles
-      .map((f, idx) => ({ f, idx }))
-      .filter(({ f }) => f.status === 'pending')
-      .map(({ idx }) => idx)
-
-    for (const idx of toUploadIndices) {
-      await uploadSingleFile(idx)
+      const isDuplicate = await checkDuplicate(idx)
+      if (!isDuplicate) {
+        const docId = await uploadSingleFile(idx)
+        if (docId) {
+          newDocIds.push(docId)
+        }
+      }
     }
 
     setIsUploading(false)
 
     // 上传完成后刷新列表，传递新文档 ID 用于 SSE 监听
-    const submittedFiles = uploadFiles.filter(f => f.status === 'submitted')
-    if (submittedFiles.length > 0) {
-      const newDocIds = submittedFiles.map(f => f.uploadedDocId).filter(Boolean) as string[]
+    if (newDocIds.length > 0) {
       onUploadComplete(newDocIds)
     }
   }
 
   const forceUploadFile = async (index: number) => {
-    await uploadSingleFile(index, true)
-    onUploadComplete()
+    const docId = await uploadSingleFile(index, true)
+    if (docId) {
+      onUploadComplete([docId])
+    }
   }
 
   const removeFile = (index: number) => {

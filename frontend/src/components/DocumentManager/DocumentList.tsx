@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FileText, Trash2, Loader2, CheckCircle, XCircle, Clock, Eye, BookOpen, ChevronDown, Zap, Brain, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Document, ProcessStatus } from '../../types/document'
@@ -11,49 +11,50 @@ interface DocumentListProps {
   onDelete: (documentId: string) => void
   onPreview: (document: Document) => void
   onRefresh?: () => void  // 刷新文档列表的回调
-  onStatusUpdate?: (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number }) => void
-  watchingDocId?: string | null
+  onStatusUpdate?: (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number; error?: string }) => void
+  watchingDocIds?: string[]
 }
 
-export function DocumentList({ documents, collectionId, onDelete, onPreview, onRefresh, onStatusUpdate, watchingDocId }: DocumentListProps) {
+interface DocumentStatusWatcherProps {
+  docId: string
+  collectionId: string
+  onStatusUpdate?: (docId: string, status: { status: ProcessStatus; progress?: number; chunk_count?: number; error?: string }) => void
+}
+
+function DocumentStatusWatcher({ docId, collectionId, onStatusUpdate }: DocumentStatusWatcherProps) {
+  const handleStatusChange = useCallback(
+    (status: { status: ProcessStatus; progress?: number; chunk_count?: number; error?: string }) => {
+      onStatusUpdate?.(docId, status)
+    },
+    [docId, onStatusUpdate]
+  )
+
+  useDocumentStatus(docId, collectionId, handleStatusChange)
+
+  return null
+}
+
+export function DocumentList({ documents, collectionId, onDelete, onPreview, onRefresh, onStatusUpdate, watchingDocIds = [] }: DocumentListProps) {
   const [parsingDocs, setParsingDocs] = useState<Set<string>>(new Set())
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // SSE 实时状态订阅
-  const liveStatus = useDocumentStatus(watchingDocId ?? null, collectionId, (status) => {
-    if (watchingDocId && onStatusUpdate) {
-      onStatusUpdate(watchingDocId, status)
-    }
-  })
-
-  // 合并实时状态到文档列表
-  const documentsWithStatus = useMemo(() => {
-    return documents.map(doc => {
-      if (doc.id === watchingDocId && liveStatus) {
-        return {
-          ...doc,
-          status: liveStatus.status as ProcessStatus,
-          progress: liveStatus.progress ?? doc.progress,
-          chunk_count: liveStatus.chunk_count ?? doc.chunk_count,
-          error_message: liveStatus.error ?? doc.error_message,
-        }
-      }
-      return doc
-    })
-  }, [documents, watchingDocId, liveStatus])
+  const watchedDocumentIds = useMemo(
+    () => Array.from(new Set(watchingDocIds)),
+    [watchingDocIds]
+  )
 
   // 前端过滤
   const filteredDocuments = useMemo(() =>
-    documentsWithStatus.filter(d =>
+    documents.filter(d =>
       d.title.toLowerCase().includes(searchQuery.toLowerCase())
     ),
-    [documentsWithStatus, searchQuery]
+    [documents, searchQuery]
   )
 
-  // 从 documentsWithStatus 中获取已解析状态
+  // 从 documents 中获取已解析状态
   const isParsed = (docId: string) => {
-    const doc = documentsWithStatus.find(d => d.id === docId)
+    const doc = documents.find(d => d.id === docId)
     return doc?.has_paper || false
   }
 
@@ -112,7 +113,7 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview, onR
     }
   }
 
-  if (documentsWithStatus.length === 0) {
+  if (documents.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400 text-sm">
         暂无文档
@@ -161,6 +162,15 @@ export function DocumentList({ documents, collectionId, onDelete, onPreview, onR
 
   return (
     <div className="space-y-2">
+      {watchedDocumentIds.map(docId => (
+        <DocumentStatusWatcher
+          key={docId}
+          docId={docId}
+          collectionId={collectionId}
+          onStatusUpdate={onStatusUpdate}
+        />
+      ))}
+
       {/* 搜索框 */}
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
