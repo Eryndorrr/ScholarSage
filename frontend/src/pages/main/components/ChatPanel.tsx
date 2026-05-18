@@ -52,9 +52,9 @@ export function ChatPanel() {
   }
 
   return (
-    <main className="flex-1 flex">
+    <main className="flex-1 flex overflow-hidden min-h-0">
       {/* Chat window */}
-      <div className="flex-1 flex flex-col bg-white dark:bg-gray-800">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-white dark:bg-gray-800">
         {selectedCollectionId ? (
           <ChatWindow
             collectionId={selectedCollectionId}
