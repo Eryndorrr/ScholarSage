@@ -16,7 +16,6 @@ export function SessionSidebar() {
     removeSession,
     setCurrentSession,
     setMessages,
-    updateCurrentSession,
     setSearchQuery,
   } = useSessionStore()
 
