@@ -136,7 +136,7 @@ export function SessionSidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {sessions.length === 0 ? (
           <div className="text-center py-8 text-gray-400 dark:text-gray-500">
             <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />

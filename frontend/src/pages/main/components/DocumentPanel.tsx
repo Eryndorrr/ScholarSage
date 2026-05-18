@@ -166,7 +166,7 @@ export function DocumentPanel() {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
             {isLoading ? (
               <div className="text-center py-4 text-gray-500 dark:text-gray-400">加载中...</div>
             ) : (
@@ -194,14 +194,14 @@ export function DocumentPanel() {
           </div>
         </>
       ) : selectedPaperId ? (
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4">
           <PaperDetail
             paperId={selectedPaperId}
             onClose={() => setSelectedPaperId(null)}
           />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4">
           <PaperList
             collectionId={selectedCollectionId}
             onSelectPaper={setSelectedPaperId}

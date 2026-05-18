@@ -18,13 +18,6 @@ vi.mock('../../../pages/main/components/ChatPanel', () => ({
   ChatPanel: () => <div data-testid="chat-panel">ChatPanel</div>,
 }))
 
-// Mock ResizableSidebar to render children directly
-vi.mock('../../../components/Layout/ResizableSidebar', () => ({
-  ResizableSidebar: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="resizable-sidebar">{children}</div>
-  ),
-}))
-
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } }
@@ -66,5 +59,17 @@ describe('MainPage', () => {
 
     expect(screen.getByTestId('sidebar')).toBeInTheDocument()
     expect(screen.getByTestId('document-panel')).toBeInTheDocument()
+  })
+
+  it('should constrain nested flex panels so list areas can scroll', () => {
+    const { container } = render(<MainPage />, { wrapper: createWrapper() })
+
+    expect(container.firstElementChild).toHaveClass('h-full', 'min-h-0')
+
+    const sidebars = container.querySelectorAll('aside')
+    expect(sidebars).toHaveLength(2)
+    sidebars.forEach((sidebar) => {
+      expect(sidebar).toHaveClass('min-h-0', 'overflow-hidden')
+    })
   })
 })

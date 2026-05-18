@@ -23,7 +23,7 @@ export function MainPage() {
   }, [selectedId, resetDocs, resetSessions])
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="h-full min-h-0 flex-1 flex overflow-hidden">
       <ResizableSidebar
         defaultWidth={256}
         minWidth={200}

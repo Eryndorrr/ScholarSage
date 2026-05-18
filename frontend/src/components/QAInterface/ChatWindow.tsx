@@ -214,7 +214,7 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 min-h-0 flex flex-col h-full">
       {/* 顶部工具栏 */}
       {sessionTitle && (
         <div className="border-b dark:border-gray-700 px-4 py-2 bg-white dark:bg-gray-800">
@@ -225,7 +225,7 @@ export function ChatWindow({
       )}
 
       {/* 消息区域 */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">
             <div className="text-center max-w-md">

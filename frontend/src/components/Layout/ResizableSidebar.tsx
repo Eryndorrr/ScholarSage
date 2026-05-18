@@ -56,7 +56,7 @@ export function ResizableSidebar({
 
   if (isCollapsed) {
     return (
-      <aside className={`w-12 bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col ${className}`}>
+      <aside className={`w-12 h-full bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col min-h-0 overflow-hidden ${className}`}>
         {title && (
           <div className="p-2 border-b dark:border-gray-700 flex items-center justify-center">
             <button
@@ -68,7 +68,7 @@ export function ResizableSidebar({
             </button>
           </div>
         )}
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 min-h-0 flex items-center justify-center">
           <button
             onClick={toggleCollapse}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
@@ -85,7 +85,7 @@ export function ResizableSidebar({
     <aside
       ref={sidebarRef}
       style={{ width: `${width}px` }}
-      className={`relative bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col ${className}`}
+      className={`relative bg-white dark:bg-gray-800 border-${side === 'left' ? 'r' : 'l'} dark:border-gray-700 flex flex-col min-h-0 overflow-hidden ${className}`}
     >
       {children}
 
