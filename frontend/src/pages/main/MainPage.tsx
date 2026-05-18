@@ -4,9 +4,9 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useSessionStore } from '../../stores/sessionStore'
 import { ResizableSidebar } from '../../components/Layout/ResizableSidebar'
 import { Sidebar } from './components/Sidebar'
+import { DocumentPanel } from './components/DocumentPanel'
 
 // Placeholder components - will be implemented in next tasks
-const DocumentPanelPlaceholder = () => <div className="p-4">Document Panel (TODO)</div>
 const ChatPanelPlaceholder = () => <div className="p-4">Chat Panel (TODO)</div>
 
 export function MainPage() {
@@ -41,7 +41,7 @@ export function MainPage() {
         side="left"
         title="文档"
       >
-        <DocumentPanelPlaceholder />
+        <DocumentPanel />
       </ResizableSidebar>
 
       <ChatPanelPlaceholder />
