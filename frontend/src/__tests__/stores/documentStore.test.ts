@@ -11,11 +11,15 @@ describe('documentStore', () => {
     id: 'doc-1',
     title: 'Test Document',
     file_type: 'pdf',
+    file_size: 1024,
+    file_hash: null,
     status: 'completed',
     collection_id: 'col-1',
     upload_time: '2024-01-01T00:00:00Z',
     chunk_count: 10,
     progress: 100,
+    error_message: null,
+    has_paper: false,
   }
 
   it('should initialize with default values', () => {

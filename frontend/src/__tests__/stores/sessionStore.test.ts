@@ -9,8 +9,11 @@ describe('sessionStore', () => {
 
   const mockSession: Session = {
     id: 'session-1',
+    collection_id: 'col-1',
     title: 'Test Session',
+    summary: null,
     message_count: 0,
+    is_active: true,
     web_search_enabled: false,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -60,7 +63,7 @@ describe('sessionStore', () => {
   it('should reset all state', () => {
     useSessionStore.getState().addSession(mockSession)
     useSessionStore.getState().setCurrentSession(mockSession)
-    useSessionStore.getState().setMessages([{ id: 'm1', role: 'user', content: 'test', created_at: '' }])
+    useSessionStore.getState().setMessages([{ id: 'm1', session_id: 'session-1', role: 'user', content: 'test', created_at: '' }])
     useSessionStore.getState().setSearchQuery('test')
 
     useSessionStore.getState().reset()
