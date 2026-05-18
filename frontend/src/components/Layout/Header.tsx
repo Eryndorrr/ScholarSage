@@ -1,17 +1,11 @@
 import { BookOpen, BarChart3, Network, Activity, LogOut, User, Shield, Settings, ChevronDown, Sun, Moon } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
 
-interface HeaderProps {
-  onEvaluationClick?: () => void
-  onGraphClick?: () => void
-  onDashboardClick?: () => void
-  onAdminClick?: () => void
-  onSettingsClick?: () => void
-}
-
-export function Header({ onEvaluationClick, onGraphClick, onDashboardClick, onAdminClick, onSettingsClick }: HeaderProps) {
+export function Header() {
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -47,39 +41,33 @@ export function Header({ onEvaluationClick, onGraphClick, onDashboardClick, onAd
             {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
           </button>
 
-          {onDashboardClick && (
-            <button
-              onClick={onDashboardClick}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
-            >
-              <Activity className="w-5 h-5" />
-              <span className="text-sm font-medium">健康度</span>
-            </button>
-          )}
-          {onGraphClick && (
-            <button
-              onClick={onGraphClick}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
-            >
-              <Network className="w-5 h-5" />
-              <span className="text-sm font-medium">知识图谱</span>
-            </button>
-          )}
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+          >
+            <Activity className="w-5 h-5" />
+            <span className="text-sm font-medium">健康度</span>
+          </button>
+          <button
+            onClick={() => navigate('/graph')}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+          >
+            <Network className="w-5 h-5" />
+            <span className="text-sm font-medium">知识图谱</span>
+          </button>
 
-          {onEvaluationClick && (
-            <button
-              onClick={onEvaluationClick}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            >
-              <BarChart3 className="w-5 h-5" />
-              <span className="text-sm font-medium">效果评估</span>
-            </button>
-          )}
+          <button
+            onClick={() => navigate('/evaluation')}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+          >
+            <BarChart3 className="w-5 h-5" />
+            <span className="text-sm font-medium">效果评估</span>
+          </button>
 
           {/* 管理员按钮 */}
-          {user?.role === 'admin' && onAdminClick && (
+          {user?.role === 'admin' && (
             <button
-              onClick={onAdminClick}
+              onClick={() => navigate('/admin')}
               className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
             >
               <Shield className="w-5 h-5" />
@@ -110,7 +98,7 @@ export function Header({ onEvaluationClick, onGraphClick, onDashboardClick, onAd
                     <button
                       onClick={() => {
                         setDropdownOpen(false)
-                        onSettingsClick?.()
+                        navigate('/settings')
                       }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
