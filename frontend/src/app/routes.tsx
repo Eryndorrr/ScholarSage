@@ -3,13 +3,13 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { AuthGuard } from './AuthGuard'
 
-// Placeholder components - will be replaced with actual pages
-const MainPage = () => <div>Main Page (TODO)</div>
-const EvaluationPage = () => <div>Evaluation Page (TODO)</div>
-const GraphPage = () => <div>Graph Page (TODO)</div>
-const DashboardPage = () => <div>Dashboard Page (TODO)</div>
-const AdminPage = () => <div>Admin Page (TODO)</div>
-const AuthPage = () => <div>Auth Page (TODO)</div>
+// Pages
+import { MainPage } from '../pages/main/MainPage'
+import { EvaluationPage } from '../pages/evaluation/EvaluationPage'
+import { GraphPage } from '../pages/graph/GraphPage'
+import { DashboardPage } from '../pages/dashboard/DashboardPage'
+import { AdminPage } from '../pages/admin/AdminPage'
+import { AuthPage } from '../pages/auth/AuthPage'
 
 export const router = createBrowserRouter([
   {
