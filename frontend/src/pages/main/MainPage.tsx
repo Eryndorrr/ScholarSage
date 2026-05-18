@@ -5,9 +5,9 @@ import { useSessionStore } from '../../stores/sessionStore'
 import { ResizableSidebar } from '../../components/Layout/ResizableSidebar'
 import { Sidebar } from './components/Sidebar'
 import { DocumentPanel } from './components/DocumentPanel'
+import { ChatPanel } from './components/ChatPanel'
 
 // Placeholder components - will be implemented in next tasks
-const ChatPanelPlaceholder = () => <div className="p-4">Chat Panel (TODO)</div>
 
 export function MainPage() {
   const selectedId = useCollectionStore((s) => s.selectedId)
@@ -44,7 +44,7 @@ export function MainPage() {
         <DocumentPanel />
       </ResizableSidebar>
 
-      <ChatPanelPlaceholder />
+      <ChatPanel />
     </div>
   )
 }
