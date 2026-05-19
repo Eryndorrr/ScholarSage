@@ -108,14 +108,14 @@ class BM25Retriever:
             self.corpus[collection_name] = {}
             self.documents[collection_name] = {}
 
-        # 添加文档
-        tokenized_corpus = []
+        # 添加或更新文档，然后基于整个 collection 重建索引。
         for doc in documents:
             doc_id = doc.get("id")
+            if not doc_id:
+                continue
             content = doc.get("content", "")
             metadata = doc.get("metadata", {})
 
-            # 分词
             tokens = self._tokenize(content)
             self.corpus[collection_name][doc_id] = tokens
             self.documents[collection_name][doc_id] = {
@@ -123,13 +123,17 @@ class BM25Retriever:
                 "metadata": metadata,
                 "id": doc_id
             }
-            tokenized_corpus.append(tokens)
 
-        # 构建 BM25 索引
+        tokenized_corpus = list(self.corpus[collection_name].values())
         if tokenized_corpus:
             self.indices[collection_name] = BM25Okapi(tokenized_corpus)
             self._save_index(collection_name)
-            logger.info(f"Indexed {len(documents)} documents for BM25 in collection: {collection_name}")
+            logger.info(
+                "Indexed %s new/updated documents for BM25 in collection %s (%s total)",
+                len(documents),
+                collection_name,
+                len(tokenized_corpus),
+            )
 
     def add_document(self, collection_name: str, document: Dict):
         """
@@ -253,18 +257,23 @@ class BM25Retriever:
 
         # 排序并获取 top_k
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        positive_scores = [float(scores[idx]) for idx in top_indices if scores[idx] > 0]
+        max_score = max(positive_scores) if positive_scores else 0.0
 
         results = []
         for idx in top_indices:
             if scores[idx] > 0:  # 只返回有正分数的结果
                 doc_id = doc_ids[idx]
                 doc_info = self.documents[collection_name][doc_id]
+                score = float(scores[idx])
+                relevance_score = score / max_score if max_score > 0 else 0.0
                 results.append({
                     "id": doc_id,
                     "content": doc_info.get("content", ""),
                     "metadata": doc_info.get("metadata", {}),
-                    "score": float(scores[idx]),
-                    "distance": 1 - float(scores[idx])  # 转换为距离格式（与向量检索兼容）
+                    "score": score,
+                    "relevance_score": relevance_score,
+                    "distance": 1 - relevance_score
                 })
 
         return results

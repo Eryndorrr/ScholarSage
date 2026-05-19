@@ -1,9 +1,23 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.auth import get_current_user
+from app.models.user import User
 
 
 client = TestClient(app)
+
+
+def _test_user():
+    return User(
+        id="test-user",
+        username="test-user",
+        email="test@example.com",
+        hashed_password="hashed",
+    )
+
+
+app.dependency_overrides[get_current_user] = _test_user
 
 
 def test_create_collection():

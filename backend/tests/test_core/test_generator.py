@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch
 from app.core.rag.generator import Generator, GeneratorError
-from openai.error import OpenAIError
+from openai import OpenAIError
 
 
 class TestGenerator:
@@ -13,10 +13,17 @@ class TestGenerator:
             with patch("app.core.rag.generator.settings") as mock_settings:
                 mock_settings.openai_api_key = "test-key"
                 mock_settings.openai_model = "gpt-4"
+                mock_settings.openai_base_url = "https://example.test/v1"
+                mock_settings.llm_timeout = 30
+                mock_settings.llm_fallback_models = ""
 
                 generator = Generator()
 
-                mock_openai.assert_called_once_with(api_key="test-key")
+                mock_openai.assert_called_once_with(
+                    api_key="test-key",
+                    base_url="https://example.test/v1",
+                    timeout=30,
+                )
                 assert generator.model == "gpt-4"
 
     def test_init_with_custom_values(self):
@@ -24,7 +31,8 @@ class TestGenerator:
         with patch("app.core.rag.generator.OpenAI") as mock_openai:
             generator = Generator(api_key="custom-key", model="gpt-3.5-turbo")
 
-            mock_openai.assert_called_once_with(api_key="custom-key")
+            call_kwargs = mock_openai.call_args.kwargs
+            assert call_kwargs["api_key"] == "custom-key"
             assert generator.model == "gpt-3.5-turbo"
 
     @patch("app.core.rag.generator.OpenAI")

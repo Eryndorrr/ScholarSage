@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -36,8 +36,77 @@ def _verify_collection_access(collection_id: str, current_user: User, db: Sessio
         Collection.user_id == current_user.id,
     ).first()
     if not collection:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="知识库不存在")
+
+
+def _resolve_search_collections(
+    request: QueryRequest,
+    current_user: User,
+    db: Session,
+) -> list[Collection]:
+    """Resolve the concrete collections that should be searched."""
+    if request.search_all:
+        return db.query(Collection).filter(
+            Collection.user_id == current_user.id,
+        ).order_by(Collection.created_at).all()
+
+    if not request.collection_id:
+        return []
+
+    collection = db.query(Collection).filter(
+        Collection.id == request.collection_id,
+        Collection.user_id == current_user.id,
+    ).first()
+    if not collection:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    return [collection]
+
+
+def _result_relevance_score(result: dict) -> float:
+    """Return a normalized relevance score for sorting/source confidence."""
+    relevance_score = result.get("relevance_score")
+    if relevance_score is not None:
+        return max(0.0, min(1.0, float(relevance_score)))
+
+    distance = result.get("distance")
+    if distance is not None and 0 <= distance <= 1:
+        return max(0.0, min(1.0, 1 - float(distance)))
+
+    fusion_score = result.get("fusion_score")
+    if fusion_score is not None:
+        return max(0.0, float(fusion_score))
+
+    return 0.0
+
+
+def _retrieve_across_collections(
+    retriever: Retriever,
+    question: str,
+    collections: list[Collection],
+    top_k: int,
+    use_hybrid: bool | None,
+    use_rerank: bool | None,
+) -> list[dict]:
+    """Search one or more collections and return globally ranked results."""
+    results: list[dict] = []
+    for collection in collections:
+        collection_results = retriever.retrieve(
+            query=question,
+            collection_name=collection.id,
+            top_k=top_k,
+            use_hybrid=use_hybrid,
+            use_rerank=use_rerank,
+        )
+        for result in collection_results:
+            enriched = result.copy()
+            metadata = dict(enriched.get("metadata") or {})
+            metadata.setdefault("collection_id", collection.id)
+            metadata.setdefault("collection_name", collection.name)
+            enriched["metadata"] = metadata
+            enriched["relevance_score"] = _result_relevance_score(enriched)
+            results.append(enriched)
+
+    return sorted(results, key=_result_relevance_score, reverse=True)[:top_k]
 
 
 @lru_cache()
@@ -136,9 +205,8 @@ async def query_stream(
 ):
     """流式问答（支持中断）"""
     start_time = time.time()
-    if request.collection_id:
-        _verify_collection_access(request.collection_id, current_user, db)
     tracer = get_tracer()
+    collections = _resolve_search_collections(request, current_user, db)
 
     # 获取或创建会话
     session = None
@@ -158,17 +226,17 @@ async def query_stream(
             summary = session.summary
 
     # 检索相关文档
-    collection_name = request.collection_id if not request.search_all else "all"
     retrieval_start = time.time()
     with tracer.start_as_current_span("retrieval") as span:
         span.set_attribute("query", request.question[:100])
-        span.set_attribute("collection", collection_name)
-        results = retriever.retrieve(
-            query=request.question,
-            collection_name=collection_name,
+        span.set_attribute("collections", ",".join(collection.id for collection in collections))
+        results = _retrieve_across_collections(
+            retriever=retriever,
+            question=request.question,
+            collections=collections,
             top_k=request.top_k,
             use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank
+            use_rerank=request.use_rerank,
         )
         span.set_attribute("results_count", len(results))
     retrieval_duration = time.time() - retrieval_start
@@ -215,12 +283,8 @@ async def query_stream(
     sources = []
     confidence_sum = 0.0
     for r in results:
-        distance = r.get('distance')
-        if distance is not None and 0 <= distance <= 1:
-            relevance_score = 1 - distance
-            confidence_sum += relevance_score
-        else:
-            relevance_score = 0.0
+        relevance_score = _result_relevance_score(r)
+        confidence_sum += relevance_score
         sources.append(SourceResponse(
             document_id=r['metadata'].get('document_id', ''),
             title=r['metadata'].get('title', '未知文档'),
@@ -338,9 +402,8 @@ async def query(
 ):
     """智能问答（支持多轮对话和联网检索）"""
     start_time = time.time()
-    if request.collection_id:
-        _verify_collection_access(request.collection_id, current_user, db)
     tracer = get_tracer()
+    collections = _resolve_search_collections(request, current_user, db)
 
     # 获取或创建会话
     session = None
@@ -364,17 +427,17 @@ async def query(
             logger.info(f"Session {session.id}: {len(history)} history messages, has_summary: {bool(summary)}")
 
     # 检索相关文档（支持混合检索和重排序）
-    collection_name = request.collection_id if not request.search_all else "all"
     retrieval_start = time.time()
     with tracer.start_as_current_span("retrieval") as span:
         span.set_attribute("query", request.question[:100])
-        span.set_attribute("collection", collection_name)
-        results = retriever.retrieve(
-            query=request.question,
-            collection_name=collection_name,
+        span.set_attribute("collections", ",".join(collection.id for collection in collections))
+        results = _retrieve_across_collections(
+            retriever=retriever,
+            question=request.question,
+            collections=collections,
             top_k=request.top_k,
             use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank
+            use_rerank=request.use_rerank,
         )
         span.set_attribute("results_count", len(results))
     retrieval_duration = time.time() - retrieval_start
@@ -445,12 +508,8 @@ async def query(
     sources = []
     confidence_sum = 0.0
     for r in results:
-        distance = r.get('distance')
-        if distance is not None and 0 <= distance <= 1:
-            relevance_score = 1 - distance
-            confidence_sum += relevance_score
-        else:
-            relevance_score = 0.0
+        relevance_score = _result_relevance_score(r)
+        confidence_sum += relevance_score
         sources.append(SourceResponse(
             document_id=r['metadata'].get('document_id', ''),
             title=r['metadata'].get('title', '未知文档'),

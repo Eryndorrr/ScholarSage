@@ -427,12 +427,7 @@ def delete_document(
     # 删除 BM25 索引
     try:
         bm25_retriever = get_bm25_retriever()
-        # 删除该文档的所有 chunks
-        # 需要找到所有相关的 chunk IDs
-        if deleted_count and deleted_count > 0:
-            # 由于 BM25 使用 chunk_id，这里需要逐个删除
-            # 暂时跳过，因为 chunk_ids 在处理时生成
-            pass
+        bm25_retriever.remove_document(collection_id, document_id)
     except Exception as e:
         logger.warning(f"Failed to delete from BM25 index: {e}")
 

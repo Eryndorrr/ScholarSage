@@ -24,4 +24,4 @@ def test_markdown_parser_chunk_text():
 def test_pdf_parser_file_not_found():
     """测试PDF文件不存在"""
     with pytest.raises(FileNotFoundError):
-        PDFParser("nonexistent.pdf")
+        PDFParser("nonexistent.pdf").extract_text()

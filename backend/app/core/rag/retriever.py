@@ -14,6 +14,11 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _clamp_relevance_score(score: float) -> float:
+    """Clamp a computed relevance score into the public 0-1 range."""
+    return max(0.0, min(1.0, score))
+
+
 class RetrieverError(Exception):
     """Retriever custom exception"""
     pass
@@ -146,12 +151,26 @@ class Retriever:
 
         # 格式化结果
         formatted_results = []
+        metadatas = results.get('metadatas') or []
+        distances = results.get('distances') or []
+        ids = results.get('ids') or []
         for i in range(len(results['documents'][0])):
+            metadata = {}
+            if metadatas and metadatas[0] and i < len(metadatas[0]):
+                metadata = metadatas[0][i] or {}
+
+            distance = 0
+            if distances and distances[0] and i < len(distances[0]):
+                distance = distances[0][i]
+
+            doc_id = ids[0][i] if ids and ids[0] and i < len(ids[0]) else None
+            relevance_score = _clamp_relevance_score(1 - distance) if distance is not None else 0.0
             formatted_results.append({
                 'content': results['documents'][0][i],
-                'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
-                'distance': results['distances'][0][i] if results['distances'] else 0,
-                'id': results['ids'][0][i]
+                'metadata': metadata,
+                'distance': distance,
+                'relevance_score': relevance_score,
+                'id': doc_id
             })
 
         return formatted_results
@@ -214,6 +233,11 @@ class Retriever:
         Returns:
             融合后的结果
         """
+        if not bm25_results:
+            return vector_results
+        if not vector_results:
+            return bm25_results
+
         # 文档ID到分数和文档的映射
         doc_scores: Dict[str, Dict] = {}
 
@@ -248,12 +272,16 @@ class Retriever:
             reverse=True
         )
 
+        max_score = sorted_results[0]['score'] if sorted_results else 0.0
+
         # 格式化输出
         results = []
         for item in sorted_results:
             doc = item['doc'].copy()
             doc['fusion_score'] = item['score']
-            doc['distance'] = 1 - item['score']  # 转换为距离格式
+            relevance_score = item['score'] / max_score if max_score > 0 else 0.0
+            doc['relevance_score'] = _clamp_relevance_score(relevance_score)
+            doc['distance'] = 1 - doc['relevance_score']
             results.append(doc)
 
         return results

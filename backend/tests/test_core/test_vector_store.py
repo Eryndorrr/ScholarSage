@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from app.core.rag.vector_store import VectorStore, VectorStoreError
 import chromadb
-from chromadb.errors import ChromaException
+from chromadb.errors import ChromaError
 
 
 class TestVectorStore:
@@ -44,7 +44,7 @@ class TestVectorStore:
     def test_create_collection_error(self, mock_client):
         """测试创建集合失败"""
         mock_client.return_value = Mock()
-        mock_client.return_value.create_collection.side_effect = ChromaException("Error")
+        mock_client.return_value.create_collection.side_effect = ChromaError("Error")
 
         store = VectorStore(persist_dir="/test")
 
@@ -69,7 +69,7 @@ class TestVectorStore:
     def test_get_collection_error(self, mock_client):
         """测试获取集合失败"""
         mock_client.return_value = Mock()
-        mock_client.return_value.get_collection.side_effect = ChromaException("Error")
+        mock_client.return_value.get_collection.side_effect = ChromaError("Error")
 
         store = VectorStore(persist_dir="/test")
 
@@ -91,7 +91,7 @@ class TestVectorStore:
     def test_delete_collection_error(self, mock_client):
         """测试删除集合失败"""
         mock_client.return_value = Mock()
-        mock_client.return_value.delete_collection.side_effect = ChromaException("Error")
+        mock_client.return_value.delete_collection.side_effect = ChromaError("Error")
 
         store = VectorStore(persist_dir="/test")
 
@@ -104,7 +104,7 @@ class TestVectorStore:
         """测试成功添加文档"""
         mock_client.return_value = Mock()
         mock_collection = Mock()
-        mock_client.return_value.get_collection.return_value = mock_collection
+        mock_client.return_value.get_or_create_collection.return_value = mock_collection
 
         store = VectorStore(persist_dir="/test")
         store.add_documents(
@@ -120,7 +120,7 @@ class TestVectorStore:
     def test_add_documents_error(self, mock_client):
         """测试添加文档失败"""
         mock_client.return_value = Mock()
-        mock_client.return_value.get_collection.side_effect = ChromaException("Error")
+        mock_client.return_value.get_or_create_collection.side_effect = ChromaError("Error")
 
         store = VectorStore(persist_dir="/test")
 
@@ -130,7 +130,7 @@ class TestVectorStore:
                 documents=["doc1"],
                 embeddings=[[0.1, 0.2]]
             )
-        assert "Failed to add documents" in str(exc_info.value)
+        assert "Failed to get or create collection" in str(exc_info.value)
 
     @patch("app.core.rag.vector_store.chromadb.PersistentClient")
     def test_search_success(self, mock_client):
@@ -154,7 +154,9 @@ class TestVectorStore:
     def test_search_error(self, mock_client):
         """测试搜索失败"""
         mock_client.return_value = Mock()
-        mock_client.return_value.get_collection.side_effect = ChromaException("Error")
+        mock_collection = Mock()
+        mock_client.return_value.get_collection.return_value = mock_collection
+        mock_collection.query.side_effect = ChromaError("Error")
 
         store = VectorStore(persist_dir="/test")
 

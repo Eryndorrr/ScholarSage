@@ -1,8 +1,15 @@
 import pytest
 import httpx
+import os
 import time
 
 BASE_URL = "http://localhost:8000"
+
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_E2E") != "1",
+    reason="E2E test requires a running API server, auth setup, and test_document.pdf",
+)
 
 
 def test_e2e_workflow():

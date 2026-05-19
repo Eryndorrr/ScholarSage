@@ -14,6 +14,7 @@ def test_document_processor_process_pdf(mock_parser, mock_embedding, mock_vector
     mock_parser.return_value = mock_parser_instance
     mock_parser_instance.extract_text.return_value = "测试内容"
     mock_parser_instance.chunk_text.return_value = ["片段1", "片段2"]
+    mock_parser_instance.chunk_text_with_pages.return_value = [("片段1", 1), ("片段2", 1)]
 
     # Mock向量化引擎
     mock_embedding_instance = Mock()
