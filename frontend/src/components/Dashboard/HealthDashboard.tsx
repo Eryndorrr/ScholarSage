@@ -19,7 +19,7 @@ interface CollectionHealth {
   queries: { total: number; avg_confidence: number | null; avg_response_time: number | null }
   evaluation: {
     total_evaluations: number
-    latest_metrics: Record<string, any>
+    latest_metrics: Record<string, number | null>
     trend: Array<{
       date: string | null
       faithfulness: number | null
@@ -82,7 +82,7 @@ export function HealthDashboard({ onBack }: HealthDashboardProps) {
       if (res.ok) {
         setHealthData(await res.json())
       }
-    } catch (e) {
+    } catch {
       toast.error('加载健康数据失败')
     } finally {
       setIsLoading(false)

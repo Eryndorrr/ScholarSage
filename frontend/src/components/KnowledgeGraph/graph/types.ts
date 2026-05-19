@@ -1,3 +1,5 @@
+import type { PaperNode } from '../../../types/graph'
+
 /**
  * 知识图谱渲染相关类型定义
  */
@@ -79,7 +81,7 @@ export interface NodeRenderData {
     fontSize: number
     color: string
   }
-  data: any
+  data: PaperNode
 }
 
 // 边渲染数据
@@ -95,4 +97,13 @@ export interface EdgeRenderData {
   }
   symbol: ['none', 'arrow' | 'none']
   symbolSize: [number, number]
+}
+
+export interface GraphTooltipParams {
+  dataType?: 'node' | 'edge'
+  data: {
+    data?: PaperNode
+    source?: string
+    target?: string
+  }
 }

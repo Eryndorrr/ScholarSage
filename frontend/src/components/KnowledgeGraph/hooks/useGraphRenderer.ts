@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import type { ECharts, TooltipComponentOption } from 'echarts'
-import type { CitationGraphData, PaperNode } from '../../../types/graph'
+import type { CitationEdge, CitationGraphData, PaperNode } from '../../../types/graph'
 import type { RenderConfig, ViewportState } from '../graph/types'
 import {
   DEFAULT_RENDER_CONFIG,
@@ -45,8 +45,8 @@ export function useGraphRenderer({
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
   const [useWebGL, setUseWebGL] = useState(false)
-  const displayNodesRef = useRef<any[]>([])
-  const displayEdgesRef = useRef<any[]>([])
+  const displayNodesRef = useRef<PaperNode[]>([])
+  const displayEdgesRef = useRef<CitationEdge[]>([])
 
   // 初始化图表
   useEffect(() => {
@@ -123,21 +123,33 @@ export function useGraphRenderer({
 
       // 设置 tooltip 格式化
       if (option.tooltip && !Array.isArray(option.tooltip)) {
-        (option.tooltip as TooltipComponentOption).formatter = createTooltipFormatter(displayNodes, displayEdges) as any
+        ;(option.tooltip as TooltipComponentOption).formatter = createTooltipFormatter(
+          displayNodes,
+          displayEdges
+        ) as TooltipComponentOption['formatter']
       }
 
       chartInstance.current.setOption(option, true)
 
       // 点击事件
-      chartInstance.current.on('click', (params: any) => {
-        if (params.dataType === 'node' && params.data?.data) {
+      chartInstance.current.on('click', (params: unknown) => {
+        if (
+          params &&
+          typeof params === 'object' &&
+          'dataType' in params &&
+          params.dataType === 'node' &&
+          'data' in params &&
+          params.data &&
+          typeof params.data === 'object' &&
+          'data' in params.data
+        ) {
           onNodeClick?.(params.data.data as PaperNode)
         }
       })
 
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to render graph:', err)
-      setError(err.message || '渲染失败')
+      setError(err instanceof Error ? err.message : '渲染失败')
     } finally {
       setIsLoading(false)
     }

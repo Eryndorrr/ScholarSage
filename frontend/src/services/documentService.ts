@@ -10,6 +10,20 @@ export interface UploadResponse {
   upload_time: string
 }
 
+export class DuplicateDocumentError extends Error {
+  isDuplicate = true
+  existingDocument: DuplicateCheckResponse['existing_document']
+
+  constructor(
+    message: string,
+    existingDocument: DuplicateCheckResponse['existing_document']
+  ) {
+    super(message)
+    this.name = 'DuplicateDocumentError'
+    this.existingDocument = existingDocument
+  }
+}
+
 export const documentService = {
   async checkDuplicate(collectionId: string, file: File): Promise<DuplicateCheckResponse> {
     const formData = new FormData()
@@ -45,10 +59,10 @@ export const documentService = {
       const error = await response.json()
       // 处理重复文件错误
       if (response.status === 409) {
-        const duplicateError = new Error(error.detail?.message || '检测到重复文件')
-        ;(duplicateError as any).isDuplicate = true
-        ;(duplicateError as any).existingDocument = error.detail?.existing_document
-        throw duplicateError
+        throw new DuplicateDocumentError(
+          error.detail?.message || '检测到重复文件',
+          error.detail?.existing_document
+        )
       }
       throw new Error(error.detail || 'Upload failed')
     }

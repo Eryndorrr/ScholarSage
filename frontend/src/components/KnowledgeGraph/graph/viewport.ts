@@ -1,5 +1,9 @@
 import type { NodePosition, ViewportState } from './types'
 
+interface ChartWithViewportOption {
+  getOption: () => unknown
+}
+
 /**
  * 视口边距（像素）
  */
@@ -29,16 +33,37 @@ export function isNodeInViewport(
  * 从 ECharts 实例获取当前视口状态
  */
 export function getViewportFromChart(
-  chartInstance: any,
+  chartInstance: ChartWithViewportOption,
   containerWidth: number,
   containerHeight: number
 ): ViewportState {
   const option = chartInstance.getOption()
-  const series = option.series?.[0]
+  const series = (
+    option &&
+    typeof option === 'object' &&
+    'series' in option &&
+    Array.isArray(option.series)
+  )
+    ? option.series[0]
+    : undefined
 
   // 从 ECharts 获取缩放和中心点
-  const zoom = series?.zoom ?? 1
-  const center = series?.center ?? [0, 0]
+  const zoom = (
+    series &&
+    typeof series === 'object' &&
+    'zoom' in series &&
+    typeof series.zoom === 'number'
+  )
+    ? series.zoom
+    : 1
+  const center = (
+    series &&
+    typeof series === 'object' &&
+    'center' in series &&
+    Array.isArray(series.center)
+  )
+    ? series.center
+    : [0, 0]
 
   return {
     zoom,

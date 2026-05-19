@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Edit3 } from 'lucide-react'
 import type { Collection, CollectionUpdate } from '../../types/collection'
 
@@ -15,20 +15,30 @@ const PRESET_COLORS = [
 ]
 
 export function EditCollectionModal({ isOpen, onClose, onSubmit, collection }: EditCollectionModalProps) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [color, setColor] = useState(PRESET_COLORS[0])
-
-  // 当 collection 变化时更新表单
-  useEffect(() => {
-    if (collection) {
-      setName(collection.name)
-      setDescription(collection.description || '')
-      setColor(collection.color || PRESET_COLORS[0])
-    }
-  }, [collection])
-
   if (!isOpen || !collection) return null
+
+  return (
+    <EditCollectionForm
+      key={collection.id}
+      collection={collection}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  )
+}
+
+function EditCollectionForm({
+  onClose,
+  onSubmit,
+  collection,
+}: {
+  onClose: () => void
+  onSubmit: (id: string, data: CollectionUpdate) => void
+  collection: Collection
+}) {
+  const [name, setName] = useState(collection.name)
+  const [description, setDescription] = useState(collection.description || '')
+  const [color, setColor] = useState(collection.color || PRESET_COLORS[0])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

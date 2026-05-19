@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Globe, GlobeOff, Send, Square } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { SourceCard } from './SourceCard'
@@ -88,6 +88,9 @@ export function ChatWindow({
         webSearchResults
       })
     }
+    // Session messages are the external source of truth when switching/loading a session.
+    // Local state is still needed for in-flight streaming messages.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(convertedMessages)
     isFirstQuery.current = sessionMessages.length === 0
   }, [sessionMessages])
@@ -97,21 +100,7 @@ export function ChatWindow({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 监听重新提问
-  useEffect(() => {
-    const handleRequery = (e: CustomEvent) => {
-      const question = e.detail
-      if (question) {
-        handleQuery(question)
-      }
-    }
-    window.addEventListener('requery', handleRequery as EventListener)
-    return () => {
-      window.removeEventListener('requery', handleRequery as EventListener)
-    }
-  }, [collectionId, sessionId, webSearchEnabled])
-
-  const handleQuery = (question: string) => {
+  const handleQuery = useCallback((question: string) => {
     // 添加用户消息
     const userMsgId = `user-${Date.now()}`
     const aiMsgId = `ai-${Date.now()}`
@@ -190,7 +179,28 @@ export function ChatWindow({
         }
       }
     )
-  }
+  }, [
+    collectionId,
+    sessionId,
+    webSearchEnabled,
+    queryStream,
+    onUpdateTitle,
+    onQueryComplete,
+  ])
+
+  // 监听重新提问
+  useEffect(() => {
+    const handleRequery = (e: CustomEvent) => {
+      const question = e.detail
+      if (question) {
+        handleQuery(question)
+      }
+    }
+    window.addEventListener('requery', handleRequery as EventListener)
+    return () => {
+      window.removeEventListener('requery', handleRequery as EventListener)
+    }
+  }, [handleQuery])
 
   const handleStop = () => {
     abort()

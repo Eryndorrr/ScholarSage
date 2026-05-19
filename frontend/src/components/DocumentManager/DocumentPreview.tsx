@@ -78,6 +78,7 @@ export function DocumentPreview({ collectionId, documentId, documentTitle, fileT
 
   useEffect(() => {
     if (!isPdf) return
+    let objectUrl: string | null = null
 
     const loadPdf = async () => {
       try {
@@ -88,8 +89,8 @@ export function DocumentPreview({ collectionId, documentId, documentTitle, fileT
         if (!response.ok) throw new Error('加载PDF失败')
 
         const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        setPdfUrl(url)
+        objectUrl = URL.createObjectURL(blob)
+        setPdfUrl(objectUrl)
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载PDF失败')
       }
@@ -97,8 +98,8 @@ export function DocumentPreview({ collectionId, documentId, documentTitle, fileT
     loadPdf()
 
     return () => {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl)
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
       }
     }
   }, [collectionId, documentId, isPdf])

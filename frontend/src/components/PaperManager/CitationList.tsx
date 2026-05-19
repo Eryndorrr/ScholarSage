@@ -57,7 +57,7 @@ export function CitationList({ paperId }: CitationListProps) {
       }
       setEditForm({})
       refetch()
-    } catch (err) {
+    } catch {
       toast.error('保存失败')
     } finally {
       setIsSaving(false)
@@ -71,7 +71,7 @@ export function CitationList({ paperId }: CitationListProps) {
       await paperService.deleteCitation(citationId)
       toast.success('删除成功')
       refetch()
-    } catch (err) {
+    } catch {
       toast.error('删除失败')
     }
   }

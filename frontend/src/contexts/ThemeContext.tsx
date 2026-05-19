@@ -13,19 +13,13 @@ const ThemeContext = createContext<ThemeContextType | null>(null)
 const STORAGE_KEY = 'rag_theme'
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('light')
-
-  // 初始化：从 localStorage 或系统偏好获取主题
-  useEffect(() => {
+  const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
     if (stored) {
-      setThemeState(stored)
-    } else {
-      // 检测系统偏好
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setThemeState(prefersDark ? 'dark' : 'light')
+      return stored
     }
-  }, [])
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
 
   // 应用主题到 DOM
   useEffect(() => {

@@ -36,18 +36,6 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   const match = className?.match(/language-(\w+)/)
   const language = match ? match[1] : ''
 
-  // 提取纯文本用于复制
-  const getTextContent = (node: React.ReactNode): string => {
-    if (typeof node === 'string') return node
-    if (typeof node === 'number') return String(node)
-    if (Array.isArray(node)) return node.map(getTextContent).join('')
-    if (node && typeof node === 'object' && 'props' in node) {
-      const reactNode = node as { props: { children?: React.ReactNode } }
-      return reactNode.props.children ? getTextContent(reactNode.props.children) : ''
-    }
-    return ''
-  }
-
   const handleCopy = useCallback(() => {
     const text = codeRef.current?.textContent || ''
     navigator.clipboard.writeText(text).then(() => {

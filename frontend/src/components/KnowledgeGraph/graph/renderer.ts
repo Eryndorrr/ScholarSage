@@ -1,6 +1,7 @@
 import 'echarts-gl'
 import type { EChartsOption } from 'echarts'
-import type { NodeRenderData, EdgeRenderData, RenderConfig } from './types'
+import type { CitationEdge, PaperNode } from '../../../types/graph'
+import type { NodeRenderData, EdgeRenderData, GraphTooltipParams, RenderConfig } from './types'
 import { getLODConfig, getLODLevel, shouldShowLabel, getScaledNodeSize } from './lod'
 
 /**
@@ -29,7 +30,7 @@ export function isWebGLSupported(): boolean {
     const canvas = document.createElement('canvas')
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
     return gl !== null
-  } catch (e) {
+  } catch {
     return false
   }
 }
@@ -62,7 +63,7 @@ export function getNodeColor(incomingCitations: number, isInternal: boolean): st
  * 准备节点渲染数据
  */
 export function prepareNodeData(
-  nodes: any[],
+  nodes: PaperNode[],
   zoom: number = 1
 ): NodeRenderData[] {
   const lodLevel = getLODLevel(zoom)
@@ -74,7 +75,7 @@ export function prepareNodeData(
       ? Math.max(30, Math.min(60, 30 + node.incoming_citations * 8))
       : Math.max(18, Math.min(35, 18 + node.incoming_citations * 3))
 
-    const symbolSize = getScaledNodeSize(baseSize, zoom, isInternal)
+    const symbolSize = getScaledNodeSize(baseSize, zoom)
     const showLabel = shouldShowLabel(node.incoming_citations, lodLevel, isInternal)
 
     return {
@@ -104,7 +105,7 @@ export function prepareNodeData(
  * 注意：边的样式由 createGraphOption 中的 series.lineStyle 和 edgeSymbol 统一控制
  */
 export function prepareEdgeData(
-  edges: any[]
+  edges: CitationEdge[]
 ): EdgeRenderData[] {
   return edges.map((edge) => {
     const isInternal = edge.type === 'internal_cite'
@@ -207,12 +208,13 @@ export function createGraphOption(
  * 创建 Tooltip 格式化函数
  */
 export function createTooltipFormatter(
-  displayNodes: any[],
-  displayEdges: any[]
+  displayNodes: PaperNode[],
+  displayEdges: CitationEdge[]
 ) {
-  return (params: any): string => {
+  return (params: GraphTooltipParams): string => {
     if (params.dataType === 'node') {
       const node = params.data.data
+      if (!node) return ''
       const isInternal = node.type === 'internal'
 
       let html = `

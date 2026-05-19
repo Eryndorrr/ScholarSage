@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { evaluationService } from '../../services/evaluationService'
 import type { Evaluation } from '../../types/evaluation'
 import {
@@ -24,11 +24,7 @@ export function EvaluationHistory({ collectionId, onSelectEvaluation, refreshTri
   const [isLoading, setIsLoading] = useState(true)
   const [isExpanded, setIsExpanded] = useState(true)
 
-  useEffect(() => {
-    loadEvaluations()
-  }, [collectionId, refreshTrigger])
-
-  const loadEvaluations = async () => {
+  const loadEvaluations = useCallback(async () => {
     try {
       setIsLoading(true)
       const response = await evaluationService.listEvaluations(collectionId)
@@ -38,7 +34,11 @@ export function EvaluationHistory({ collectionId, onSelectEvaluation, refreshTri
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [collectionId])
+
+  useEffect(() => {
+    loadEvaluations()
+  }, [loadEvaluations, refreshTrigger])
 
   const handleDelete = async (e: React.MouseEvent, evaluationId: string) => {
     e.stopPropagation()
@@ -48,7 +48,7 @@ export function EvaluationHistory({ collectionId, onSelectEvaluation, refreshTri
       await evaluationService.deleteEvaluation(evaluationId)
       setEvaluations(evaluations.filter(ev => ev.id !== evaluationId))
       toast.success('已删除')
-    } catch (error) {
+    } catch {
       toast.error('删除失败')
     }
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { CitationGraph } from './CitationGraph'
 import { TopicClusterView } from './TopicClusterView'
@@ -13,6 +13,24 @@ interface KnowledgeGraphPageProps {
   onBack?: () => void
 }
 
+function getGraphErrorMessage(error: unknown): string {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'response' in error &&
+    error.response &&
+    typeof error.response === 'object' &&
+    'data' in error.response &&
+    error.response.data &&
+    typeof error.response.data === 'object' &&
+    'detail' in error.response.data &&
+    typeof error.response.data.detail === 'string'
+  ) {
+    return error.response.data.detail
+  }
+  return '加载图谱数据失败'
+}
+
 export function KnowledgeGraphPage({ onBack }: KnowledgeGraphPageProps) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
@@ -25,12 +43,7 @@ export function KnowledgeGraphPage({ onBack }: KnowledgeGraphPageProps) {
   const [showExternal, setShowExternal] = useState(false)
   const [minCitations, setMinCitations] = useState(2)
 
-  // 加载集合列表
-  useEffect(() => {
-    loadCollections()
-  }, [])
-
-  const loadCollections = async () => {
+  const loadCollections = useCallback(async () => {
     try {
       const response = await collectionService.list()
       setCollections(response)
@@ -40,22 +53,14 @@ export function KnowledgeGraphPage({ onBack }: KnowledgeGraphPageProps) {
     } catch (err) {
       console.error('Failed to load collections:', err)
     }
-  }
+  }, [])
 
-  // 加载图谱数据
+  // 加载集合列表
   useEffect(() => {
-    if (!selectedCollectionId) return
-    loadGraphData()
-  }, [selectedCollectionId])
+    loadCollections()
+  }, [loadCollections])
 
-  // 切换外部引用或过滤条件时重新加载
-  useEffect(() => {
-    if (selectedCollectionId && viewType === 'citation') {
-      loadGraphData()
-    }
-  }, [showExternal, minCitations])
-
-  const loadGraphData = async () => {
+  const loadGraphData = useCallback(async () => {
     if (!selectedCollectionId) return
 
     setLoading(true)
@@ -77,20 +82,19 @@ export function KnowledgeGraphPage({ onBack }: KnowledgeGraphPageProps) {
         const topicResponse = await graphService.getTopicClustersData(selectedCollectionId)
         setTopicData(topicResponse)
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load graph data:', err)
-      setError(err.response?.data?.detail || '加载图谱数据失败')
+      setError(getGraphErrorMessage(err))
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedCollectionId, viewType, showExternal, minCitations])
 
-  // 切换视图类型时重新加载
+  // 加载图谱数据
   useEffect(() => {
-    if (selectedCollectionId) {
-      loadGraphData()
-    }
-  }, [viewType])
+    if (!selectedCollectionId) return
+    loadGraphData()
+  }, [selectedCollectionId, loadGraphData])
 
   const handleToggleExternal = () => {
     setShowExternal(!showExternal)

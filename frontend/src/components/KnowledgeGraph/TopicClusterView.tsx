@@ -8,6 +8,21 @@ interface TopicClusterViewProps {
   onClusterClick?: (cluster: TopicCluster) => void
 }
 
+function getChartDataId(params: unknown): string | undefined {
+  if (
+    params &&
+    typeof params === 'object' &&
+    'data' in params &&
+    params.data &&
+    typeof params.data === 'object' &&
+    'id' in params.data &&
+    typeof params.data.id === 'string'
+  ) {
+    return params.data.id
+  }
+  return undefined
+}
+
 export function TopicClusterView({ data, onClusterClick }: TopicClusterViewProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<echarts.ECharts | null>(null)
@@ -32,8 +47,8 @@ export function TopicClusterView({ data, onClusterClick }: TopicClusterViewProps
     chartInstance.current.setOption(option, true)
 
     // 点击事件
-    chartInstance.current.on('click', (params: any) => {
-      const clusterId = params.data?.id
+    chartInstance.current.on('click', (params: unknown) => {
+      const clusterId = getChartDataId(params)
       if (clusterId) {
         const cluster = data.clusters.find((c) => c.id === clusterId)
         if (cluster) {
@@ -179,8 +194,9 @@ function getBubbleChartOption(data: TopicClusterData): EChartsOption {
     },
     tooltip: {
       trigger: 'item',
-      formatter: (params: any) => {
-        const cluster = data.clusters.find((c) => c.id === params.data.id)
+      formatter: (params: unknown) => {
+        const clusterId = getChartDataId(params)
+        const cluster = data.clusters.find((c) => c.id === clusterId)
         if (cluster) {
           return `
             <div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { evaluationService } from '../../services/evaluationService'
 import { apiClient } from '../../services/api'
 import type { Evaluation, EvaluationDetail } from '../../types/evaluation'
@@ -57,13 +57,7 @@ export function EvaluationPage({ onBack }: EvaluationPageProps) {
   }, [])
 
   // 加载评估历史
-  useEffect(() => {
-    if (selectedCollection) {
-      loadEvaluations()
-    }
-  }, [selectedCollection])
-
-  const loadEvaluations = async () => {
+  const loadEvaluations = useCallback(async () => {
     if (!selectedCollection) return
     setIsLoadingHistory(true)
     try {
@@ -74,7 +68,13 @@ export function EvaluationPage({ onBack }: EvaluationPageProps) {
     } finally {
       setIsLoadingHistory(false)
     }
-  }
+  }, [selectedCollection])
+
+  useEffect(() => {
+    if (selectedCollection) {
+      loadEvaluations()
+    }
+  }, [selectedCollection, loadEvaluations])
 
   // 启动评估
   const handleStartEvaluation = async () => {
@@ -135,7 +135,7 @@ export function EvaluationPage({ onBack }: EvaluationPageProps) {
       const detail = await evaluationService.getEvaluation(evaluation.id)
       setSelectedHistory(detail)
       setCurrentEvaluation(null)
-    } catch (error) {
+    } catch {
       toast.error('获取评估详情失败')
     }
   }
@@ -152,7 +152,7 @@ export function EvaluationPage({ onBack }: EvaluationPageProps) {
         setSelectedHistory(null)
       }
       toast.success('已删除')
-    } catch (error) {
+    } catch {
       toast.error('删除失败')
     }
   }

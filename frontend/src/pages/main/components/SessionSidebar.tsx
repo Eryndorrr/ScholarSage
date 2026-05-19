@@ -4,6 +4,7 @@ import { ResizableSidebar } from '../../../components/Layout/ResizableSidebar'
 import { useCollectionStore } from '../../../stores/collectionStore'
 import { useSessionStore } from '../../../stores/sessionStore'
 import { sessionService } from '../../../services/sessionService'
+import type { Session } from '../../../types/session'
 
 export function SessionSidebar() {
   const selectedCollectionId = useCollectionStore((s) => s.selectedId)
@@ -19,6 +20,19 @@ export function SessionSidebar() {
     setSearchQuery,
   } = useSessionStore()
 
+  // Select session
+  const selectSession = useCallback(async (session: Session | null) => {
+    if (!session) return
+    setCurrentSession(session)
+    try {
+      const fullSession = await sessionService.get(session.id)
+      setMessages(fullSession.messages || [])
+    } catch (error) {
+      console.error('Failed to load session messages:', error)
+      setMessages([])
+    }
+  }, [setCurrentSession, setMessages])
+
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
     if (!selectedCollectionId) return
@@ -31,20 +45,7 @@ export function SessionSidebar() {
     } catch (error) {
       console.error('Failed to fetch sessions:', error)
     }
-  }, [selectedCollectionId, currentSession, setSessions])
-
-  // Select session
-  const selectSession = async (session: typeof currentSession) => {
-    if (!session) return
-    setCurrentSession(session)
-    try {
-      const fullSession = await sessionService.get(session.id)
-      setMessages(fullSession.messages || [])
-    } catch (error) {
-      console.error('Failed to load session messages:', error)
-      setMessages([])
-    }
-  }
+  }, [selectedCollectionId, currentSession, setSessions, selectSession])
 
   // Create new session
   const createNewSession = async () => {
