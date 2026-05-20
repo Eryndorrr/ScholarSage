@@ -1,393 +1,92 @@
+from functools import lru_cache
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.schemas import QueryRequest, QueryResponse, WebSearchSource
-from app.models import QueryHistory, Collection, Session, SessionMessage
-from app.models.user import User
-from app.core.rag.retriever import Retriever
-from app.core.rag.generator import Generator
-from app.core.rag.dialog_manager import DialogManager
-from app.core.web_search import get_web_searcher
-from app.core.auth import get_current_user
-from app.core.monitoring import (
-    record_rag_query, get_tracer,
-    rag_retrieval_duration_seconds, rag_generation_duration_seconds
-)
-from app.config import settings
-from functools import lru_cache
-import time
-import json
-import logging
-import asyncio
-from typing import AsyncGenerator
 
-logger = logging.getLogger(__name__)
+from app.core.auth import get_current_user
+from app.core.rag.dialog_manager import DialogManager
+from app.core.rag.generator import Generator
+from app.core.rag.retriever import Retriever
+from app.database import get_db
+from app.models import Collection, QueryHistory
+from app.models.user import User
+from app.schemas import QueryRequest, QueryResponse
+from app.services.rag_query_service import (
+    RagQueryService,
+    resolve_search_collections,
+    result_relevance_score,
+    retrieve_across_collections,
+    verify_collection_access,
+)
 
 router = APIRouter(prefix="/api/query", tags=["query"])
 
-
-def _verify_collection_access(collection_id: str, current_user: User, db: Session):
-    """验证知识库属于当前用户"""
-    if not collection_id:
-        return
-    collection = db.query(Collection).filter(
-        Collection.id == collection_id,
-        Collection.user_id == current_user.id,
-    ).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
-
-
-def _resolve_search_collections(
-    request: QueryRequest,
-    current_user: User,
-    db: Session,
-) -> list[Collection]:
-    """Resolve the concrete collections that should be searched."""
-    if request.search_all:
-        return db.query(Collection).filter(
-            Collection.user_id == current_user.id,
-        ).order_by(Collection.created_at).all()
-
-    if not request.collection_id:
-        return []
-
-    collection = db.query(Collection).filter(
-        Collection.id == request.collection_id,
-        Collection.user_id == current_user.id,
-    ).first()
-    if not collection:
-        raise HTTPException(status_code=404, detail="知识库不存在")
-    return [collection]
-
-
-def _result_relevance_score(result: dict) -> float:
-    """Return a normalized relevance score for sorting/source confidence."""
-    relevance_score = result.get("relevance_score")
-    if relevance_score is not None:
-        return max(0.0, min(1.0, float(relevance_score)))
-
-    distance = result.get("distance")
-    if distance is not None and 0 <= distance <= 1:
-        return max(0.0, min(1.0, 1 - float(distance)))
-
-    fusion_score = result.get("fusion_score")
-    if fusion_score is not None:
-        return max(0.0, float(fusion_score))
-
-    return 0.0
-
-
-def _retrieve_across_collections(
-    retriever: Retriever,
-    question: str,
-    collections: list[Collection],
-    top_k: int,
-    use_hybrid: bool | None,
-    use_rerank: bool | None,
-) -> list[dict]:
-    """Search one or more collections and return globally ranked results."""
-    results: list[dict] = []
-    for collection in collections:
-        collection_results = retriever.retrieve(
-            query=question,
-            collection_name=collection.id,
-            top_k=top_k,
-            use_hybrid=use_hybrid,
-            use_rerank=use_rerank,
-        )
-        for result in collection_results:
-            enriched = result.copy()
-            metadata = dict(enriched.get("metadata") or {})
-            metadata.setdefault("collection_id", collection.id)
-            metadata.setdefault("collection_name", collection.name)
-            enriched["metadata"] = metadata
-            enriched["relevance_score"] = _result_relevance_score(enriched)
-            results.append(enriched)
-
-    return sorted(results, key=_result_relevance_score, reverse=True)[:top_k]
+# Backward-compatible names used by existing tests and callers inside this module.
+_verify_collection_access = verify_collection_access
+_resolve_search_collections = resolve_search_collections
+_result_relevance_score = result_relevance_score
+_retrieve_across_collections = retrieve_across_collections
 
 
 @lru_cache()
 def get_retriever() -> Retriever:
-    """Get Retriever instance (singleton)"""
+    """Get Retriever instance (singleton)."""
     return Retriever()
 
 
 @lru_cache()
 def get_generator() -> Generator:
-    """Get Generator instance (singleton)"""
+    """Get Generator instance (singleton)."""
     return Generator()
 
 
 @lru_cache()
 def get_dialog_manager() -> DialogManager:
-    """Get DialogManager instance (singleton)"""
+    """Get DialogManager instance (singleton)."""
     return DialogManager()
 
 
-async def stream_response(
-    answer_generator,
-    sources,
-    web_search_results,
-    confidence,
-    response_time,
-    db: Session,
-    request,
-    session
-) -> AsyncGenerator[str, None]:
-    """
-    流式生成响应，支持中断
-
-    SSE 格式：
-    data: {"type": "content", "text": "..."}
-    data: {"type": "sources", "data": [...]}
-    data: {"type": "done", "confidence": 0.8, "response_time": 1.5}
-    """
-    full_answer = ""
-
-    try:
-        async for chunk in answer_generator:
-            full_answer += chunk
-            yield f"data: {json.dumps({'type': 'content', 'text': chunk}, ensure_ascii=False)}\n\n"
-
-        # 发送来源信息
-        yield f"data: {json.dumps({'type': 'sources', 'data': [s.model_dump() for s in sources]}, ensure_ascii=False)}\n\n"
-
-        # 发送网络搜索结果
-        if web_search_results:
-            yield f"data: {json.dumps({'type': 'web_results', 'data': [r.model_dump() for r in web_search_results]}, ensure_ascii=False)}\n\n"
-
-        # 发送完成信号
-        yield f"data: {json.dumps({'type': 'done', 'confidence': confidence, 'response_time': response_time}, ensure_ascii=False)}\n\n"
-
-        # 保存到会话
-        if request.session_id and session:
-            # 保存用户消息
-            user_msg = SessionMessage(
-                session_id=session.id,
-                role="user",
-                content=request.question
-            )
-            db.add(user_msg)
-
-            # 保存助手消息
-            assistant_msg = SessionMessage(
-                session_id=session.id,
-                role="assistant",
-                content=full_answer,
-                sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False),
-                web_search_results=json.dumps([r.model_dump() for r in web_search_results], ensure_ascii=False) if web_search_results else None
-            )
-            db.add(assistant_msg)
-
-            # 更新会话统计
-            session.message_count += 2
-            db.commit()
-
-    except asyncio.CancelledError:
-        logger.info("Stream cancelled by client")
-        yield f"data: {json.dumps({'type': 'cancelled'}, ensure_ascii=False)}\n\n"
-    except Exception as e:
-        logger.error(f"Stream error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+def get_rag_query_service(
+    retriever: Retriever = Depends(get_retriever),
+    generator: Generator = Depends(get_generator),
+    dialog_manager: DialogManager = Depends(get_dialog_manager),
+) -> RagQueryService:
+    return RagQueryService(
+        retriever=retriever,
+        generator=generator,
+        dialog_manager=dialog_manager,
+    )
 
 
 @router.post("/stream")
 async def query_stream(
     request: QueryRequest,
     db: Session = Depends(get_db),
-    retriever: Retriever = Depends(get_retriever),
-    generator: Generator = Depends(get_generator),
-    dialog_manager: DialogManager = Depends(get_dialog_manager),
+    service: RagQueryService = Depends(get_rag_query_service),
     current_user: User = Depends(get_current_user),
 ):
     """流式问答（支持中断）"""
-    start_time = time.time()
-    tracer = get_tracer()
-    collections = _resolve_search_collections(request, current_user, db)
-
-    # 获取或创建会话
-    session = None
-    history = []
-    summary = None
-
-    if request.session_id:
-        session = db.query(Session).join(Collection).filter(
-            Session.id == request.session_id,
-            Collection.user_id == current_user.id,
-        ).first()
-        if session:
-            messages = db.query(SessionMessage).filter(
-                SessionMessage.session_id == session.id
-            ).order_by(SessionMessage.created_at).all()
-            history = [{"role": m.role, "content": m.content} for m in messages]
-            summary = session.summary
-
-    # 检索相关文档
-    retrieval_start = time.time()
-    with tracer.start_as_current_span("retrieval") as span:
-        span.set_attribute("query", request.question[:100])
-        span.set_attribute("collections", ",".join(collection.id for collection in collections))
-        results = _retrieve_across_collections(
-            retriever=retriever,
-            question=request.question,
-            collections=collections,
-            top_k=request.top_k,
-            use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank,
-        )
-        span.set_attribute("results_count", len(results))
-    retrieval_duration = time.time() - retrieval_start
-    rag_retrieval_duration_seconds.labels(
-        use_hybrid=str(request.use_hybrid),
-        use_rerank=str(request.use_rerank)
-    ).observe(retrieval_duration)
-
-    contexts = [r['content'] for r in results]
-
-    # 联网检索
-    web_search_results = []
-    web_context = ""
-
-    should_web_search = request.web_search_enabled
-    if not should_web_search and session and session.web_search_enabled:
-        should_web_search = True
-
-    if should_web_search and settings.web_search_enabled:
-        try:
-            web_searcher = get_web_searcher()
-            if web_searcher.is_available():
-                search_response = await web_searcher.search(request.question)
-                if search_response.success:
-                    web_context = web_searcher.format_results_for_context(search_response)
-                    web_search_results = [
-                        WebSearchSource(
-                            title=r.title,
-                            url=r.url,
-                            snippet=r.snippet,
-                            source=r.source
-                        )
-                        for r in search_response.results
-                    ]
-        except Exception as e:
-            logger.error(f"Web search error: {e}")
-
-    full_context = contexts
-    if web_context:
-        full_context = contexts + [web_context]
-
-    # 构建来源响应
-    from app.schemas.document import SourceResponse
-    sources = []
-    confidence_sum = 0.0
-    for r in results:
-        relevance_score = _result_relevance_score(r)
-        confidence_sum += relevance_score
-        sources.append(SourceResponse(
-            document_id=r['metadata'].get('document_id', ''),
-            title=r['metadata'].get('title', '未知文档'),
-            page=r['metadata'].get('page', 0),
-            snippet=r['content'][:200],
-            relevance_score=relevance_score,
-            collection_name=r['metadata'].get('collection_name', '')
-        ))
-
-    confidence = confidence_sum / len(results) if results else 0.0
-
-    # 无答案检测：所有来源相关性都低于阈值且无网络搜索结果
-    has_relevant_sources = any(
-        s.relevance_score >= settings.min_relevance_score for s in sources
+    answer_generator, retrieval_context, response_time, session_context = await service.prepare_stream(
+        request=request,
+        db=db,
+        current_user=current_user,
     )
-
-    if not has_relevant_sources and not web_context:
-        # 记录无答案查询指标
-        record_rag_query(
-            duration=time.time() - start_time,
-            has_web_search=False,
-            has_answer=False,
-            confidence=0.0,
-            sources_count=0,
-            retrieval_duration=retrieval_duration,
-            use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank,
-            stream=True
-        )
-        no_answer_msg = "抱歉，在当前知识库中未找到与您的问题相关的内容。请尝试换个问法，或检查知识库中是否包含相关文档。"
-
-        async def no_result_stream():
-            yield no_answer_msg
-
-        return StreamingResponse(
-            stream_response(
-                no_result_stream(),
-                sources,
-                [],
-                0.0,
-                time.time() - start_time,
-                db,
-                request,
-                session
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            }
-        )
-
-    # 创建流式生成器
-    async def answer_stream():
-        """异步流式生成答案"""
-        try:
-            for chunk in generator.generate_answer_stream(
-                question=request.question,
-                contexts=full_context,
-                history=history,
-                summary=summary,
-                web_contexts_count=len(web_search_results)
-            ):
-                yield chunk
-                await asyncio.sleep(0)  # 允许中断
-        except Exception as e:
-            logger.error(f"Stream generation error: {e}")
-            raise
-
-    response_time = time.time() - start_time
-
-    # 记录正常查询指标
-    record_rag_query(
-        duration=response_time,
-        has_web_search=bool(web_search_results),
-        has_answer=True,
-        confidence=confidence,
-        sources_count=len(sources),
-        retrieval_duration=retrieval_duration,
-        model=settings.openai_model,
-        use_hybrid=request.use_hybrid,
-        use_rerank=request.use_rerank,
-        stream=True
-    )
-
     return StreamingResponse(
-        stream_response(
-            answer_stream(),
-            sources,
-            web_search_results,
-            confidence,
+        service.sse_response(
+            answer_generator,
+            retrieval_context,
             response_time,
             db,
             request,
-            session
+            session_context,
         ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -395,232 +94,14 @@ async def query_stream(
 async def query(
     request: QueryRequest,
     db: Session = Depends(get_db),
-    retriever: Retriever = Depends(get_retriever),
-    generator: Generator = Depends(get_generator),
-    dialog_manager: DialogManager = Depends(get_dialog_manager),
+    service: RagQueryService = Depends(get_rag_query_service),
     current_user: User = Depends(get_current_user),
 ):
     """智能问答（支持多轮对话和联网检索）"""
-    start_time = time.time()
-    tracer = get_tracer()
-    collections = _resolve_search_collections(request, current_user, db)
-
-    # 获取或创建会话
-    session = None
-    history = []
-    summary = None
-
-    if request.session_id:
-        session = db.query(Session).join(Collection).filter(
-            Session.id == request.session_id,
-            Collection.user_id == current_user.id,
-        ).first()
-        if session:
-            # 获取历史消息
-            messages = db.query(SessionMessage).filter(
-                SessionMessage.session_id == session.id
-            ).order_by(SessionMessage.created_at).all()
-
-            history = [{"role": m.role, "content": m.content} for m in messages]
-            summary = session.summary
-
-            logger.info(f"Session {session.id}: {len(history)} history messages, has_summary: {bool(summary)}")
-
-    # 检索相关文档（支持混合检索和重排序）
-    retrieval_start = time.time()
-    with tracer.start_as_current_span("retrieval") as span:
-        span.set_attribute("query", request.question[:100])
-        span.set_attribute("collections", ",".join(collection.id for collection in collections))
-        results = _retrieve_across_collections(
-            retriever=retriever,
-            question=request.question,
-            collections=collections,
-            top_k=request.top_k,
-            use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank,
-        )
-        span.set_attribute("results_count", len(results))
-    retrieval_duration = time.time() - retrieval_start
-    rag_retrieval_duration_seconds.labels(
-        use_hybrid=str(request.use_hybrid),
-        use_rerank=str(request.use_rerank)
-    ).observe(retrieval_duration)
-
-    # 准备上下文
-    contexts = [r['content'] for r in results]
-
-    # 联网检索
-    web_search_results = []
-    web_context = ""
-
-    # 判断是否启用联网检索（请求参数 或 会话设置）
-    should_web_search = request.web_search_enabled
-    if not should_web_search and session and session.web_search_enabled:
-        should_web_search = True
-
-    if should_web_search and settings.web_search_enabled:
-        try:
-            web_searcher = get_web_searcher()
-            if web_searcher.is_available():
-                search_response = await web_searcher.search(request.question)
-
-                if search_response.success:
-                    web_context = web_searcher.format_results_for_context(search_response)
-                    web_search_results = [
-                        WebSearchSource(
-                            title=r.title,
-                            url=r.url,
-                            snippet=r.snippet,
-                            source=r.source
-                        )
-                        for r in search_response.results
-                    ]
-                    logger.info(f"Web search returned {len(web_search_results)} results")
-                else:
-                    logger.warning(f"Web search failed: {search_response.error}")
-        except Exception as e:
-            logger.error(f"Web search error: {e}")
-
-    # 合并上下文
-    full_context = contexts
-    if web_context:
-        # 将网络搜索结果添加到上下文
-        full_context = contexts + [web_context]
-
-    # 生成答案（支持多轮上下文）
-    with tracer.start_as_current_span("generation") as span:
-        span.set_attribute("contexts_count", len(full_context))
-        span.set_attribute("web_contexts_count", len(web_search_results))
-        answer = generator.generate_answer(
-            question=request.question,
-            contexts=full_context,
-            history=history,
-            summary=summary,
-            web_contexts_count=len(web_search_results)
-        )
-        span.set_attribute("answer_length", len(answer))
-
-    # 计算响应时间
-    response_time = time.time() - start_time
-
-    # 构建来源响应
-    from app.schemas.document import SourceResponse
-    sources = []
-    confidence_sum = 0.0
-    for r in results:
-        relevance_score = _result_relevance_score(r)
-        confidence_sum += relevance_score
-        sources.append(SourceResponse(
-            document_id=r['metadata'].get('document_id', ''),
-            title=r['metadata'].get('title', '未知文档'),
-            page=r['metadata'].get('page', 0),
-            snippet=r['content'][:200],
-            relevance_score=relevance_score,
-            collection_name=r['metadata'].get('collection_name', '')
-        ))
-
-    confidence = confidence_sum / len(results) if results else 0.0
-
-    # 无答案检测：所有来源相关性都低于阈值且无网络搜索结果
-    has_relevant_sources = any(
-        s.relevance_score >= settings.min_relevance_score for s in sources
-    )
-
-    if not has_relevant_sources and not web_context:
-        # 记录无答案查询指标
-        record_rag_query(
-            duration=time.time() - start_time,
-            has_web_search=False,
-            has_answer=False,
-            confidence=0.0,
-            sources_count=0,
-            retrieval_duration=retrieval_duration,
-            use_hybrid=request.use_hybrid,
-            use_rerank=request.use_rerank,
-            stream=False
-        )
-        return QueryResponse(
-            answer="抱歉，在当前知识库中未找到与您的问题相关的内容。请尝试换个问法，或检查知识库中是否包含相关文档。",
-            sources=sources,
-            confidence=0.0,
-            response_time=time.time() - start_time,
-            web_search_results=[]
-        )
-
-    # 保存到会话
-    if request.session_id and session:
-        # 保存用户消息
-        user_msg = SessionMessage(
-            session_id=session.id,
-            role="user",
-            content=request.question
-        )
-        db.add(user_msg)
-
-        # 保存助手消息
-        assistant_msg = SessionMessage(
-            session_id=session.id,
-            role="assistant",
-            content=answer,
-            sources=json.dumps([s.model_dump() for s in sources], ensure_ascii=False),
-            web_search_results=json.dumps([r.model_dump() for r in web_search_results], ensure_ascii=False) if web_search_results else None
-        )
-        db.add(assistant_msg)
-
-        # 更新会话统计
-        session.message_count += 2
-
-        # 检查是否需要生成摘要
-        if dialog_manager.should_summarize(session.message_count, session.summary):
-            # 获取所有消息用于摘要
-            all_messages = db.query(SessionMessage).filter(
-                SessionMessage.session_id == session.id
-            ).order_by(SessionMessage.created_at).all()
-
-            msg_list = [{"role": m.role, "content": m.content} for m in all_messages]
-            session.summary = dialog_manager.generate_summary(msg_list)
-            logger.info(f"Generated summary for session {session.id}")
-
-        db.commit()
-
-    # 保存查询历史（兼容旧版本）
-    if request.collection_id:
-        try:
-            history_record = QueryHistory(
-                collection_id=request.collection_id,
-                question=request.question,
-                answer=answer,
-                sources=[s.model_dump() for s in sources],
-                confidence=confidence,
-                response_time=response_time
-            )
-            db.add(history_record)
-            db.commit()
-            logger.info(f"Query history saved: {request.question[:50]}...")
-        except Exception as e:
-            logger.error(f"Failed to save query history: {e}")
-            db.rollback()
-
-    # 记录正常查询指标
-    record_rag_query(
-        duration=response_time,
-        has_web_search=bool(web_search_results),
-        has_answer=True,
-        confidence=confidence,
-        sources_count=len(sources),
-        retrieval_duration=retrieval_duration,
-        model=settings.openai_model,
-        use_hybrid=request.use_hybrid,
-        use_rerank=request.use_rerank,
-        stream=False
-    )
-
-    return QueryResponse(
-        answer=answer,
-        sources=sources,
-        confidence=confidence,
-        response_time=response_time,
-        web_search_results=web_search_results
+    return await service.run(
+        request=request,
+        db=db,
+        current_user=current_user,
     )
 
 
@@ -637,7 +118,6 @@ def get_query_history(
         Collection.user_id == current_user.id,
     ).first()
     if not collection:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="知识库不存在")
 
     history = db.query(QueryHistory).filter(
@@ -647,17 +127,17 @@ def get_query_history(
     return {
         "history": [
             {
-                "id": h.id,
-                "question": h.question,
-                "answer": h.answer,
-                "sources": h.sources,
-                "confidence": h.confidence,
-                "response_time": h.response_time,
-                "query_time": h.query_time.isoformat()
+                "id": item.id,
+                "question": item.question,
+                "answer": item.answer,
+                "sources": item.sources,
+                "confidence": item.confidence,
+                "response_time": item.response_time,
+                "query_time": item.query_time.isoformat(),
             }
-            for h in history
+            for item in history
         ],
-        "total": len(history)
+        "total": len(history),
     }
 
 
@@ -670,7 +150,6 @@ def delete_query_history(
     """删除单条查询历史"""
     history = db.query(QueryHistory).filter(QueryHistory.id == history_id).first()
     if not history:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="查询历史不存在")
 
     db.delete(history)
@@ -685,7 +164,7 @@ def clear_query_history(
     current_user: User = Depends(get_current_user),
 ):
     """清空知识库的查询历史"""
-    _verify_collection_access(collection_id, current_user, db)
+    verify_collection_access(collection_id, current_user, db)
     deleted = db.query(QueryHistory).filter(
         QueryHistory.collection_id == collection_id
     ).delete()

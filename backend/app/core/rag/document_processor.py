@@ -37,6 +37,21 @@ class DocumentProcessor:
             if progress_callback:
                 progress_callback(progress)
 
+        indexed_document_id = document_id or file_path
+        storage_started = False
+
+        def cleanup_partial_indexes():
+            """Remove any index entries written for this document after a failed write."""
+            try:
+                self.vector_store.delete_document(collection_id, indexed_document_id)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup document vectors: {cleanup_error}")
+
+            try:
+                self.bm25_retriever.remove_document(collection_id, indexed_document_id)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup BM25 index: {cleanup_error}")
+
         # 输入验证
         if not file_path or not isinstance(file_path, str):
             raise ValueError("file_path不能为空")
@@ -105,7 +120,7 @@ class DocumentProcessor:
             chunk_ids = chunk_ids[:len(chunks)]
             metadatas = [
                 {
-                    "document_id": document_id or file_path,
+                    "document_id": indexed_document_id,
                     "title": document_title or file_path.split("/")[-1],
                     "collection_id": collection_id,
                     "chunk_index": i,
@@ -115,6 +130,7 @@ class DocumentProcessor:
             ]
 
             logger.info(f"Storing {len(chunks)} vectors...")
+            storage_started = True
             self.vector_store.add_documents(
                 collection_name=collection_id,
                 documents=chunks,
@@ -124,19 +140,16 @@ class DocumentProcessor:
             )
 
             # 6. 索引到 BM25（用于混合检索）
-            try:
-                bm25_docs = [
-                    {
-                        "id": chunk_ids[i],
-                        "content": chunks[i],
-                        "metadata": metadatas[i]
-                    }
-                    for i in range(len(chunks))
-                ]
-                self.bm25_retriever.index_documents(collection_id, bm25_docs)
-                logger.info(f"Indexed {len(chunks)} chunks for BM25")
-            except Exception as e:
-                logger.warning(f"Failed to index for BM25: {e}")
+            bm25_docs = [
+                {
+                    "id": chunk_ids[i],
+                    "content": chunks[i],
+                    "metadata": metadatas[i]
+                }
+                for i in range(len(chunks))
+            ]
+            self.bm25_retriever.index_documents(collection_id, bm25_docs)
+            logger.info(f"Indexed {len(chunks)} chunks for BM25")
 
             update_progress(100)
             logger.info(f"Document processed successfully: {len(chunks)} chunks")
@@ -160,6 +173,8 @@ class DocumentProcessor:
             }
         except Exception as e:
             logger.exception(f"Error processing document: {e}")
+            if storage_started:
+                cleanup_partial_indexes()
             return {
                 "success": False,
                 "error": f"处理文档时发生错误: {str(e)}"
